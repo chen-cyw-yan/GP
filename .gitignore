@@ -1,0 +1,38 @@
+**/.vscode/
+**/*build*/
+**/azkaban
+**/*dist*/
+**/.idea/*
+**/source.txt
+**/result.txt
+
+
+# 敏感数据
+数据集成
+
+# Windows临时文件
+~$*
+.idea
+tmp
+# ODS
+.ipynb*
+归档
+TODO
+*.csv
+*.png
+sql.sql
+log.txt
+代码字典
+脚本/爬虫
+downloads
+脚本/处理脚本
+# 脚本/标准转换
+**/表工单
+**/数据标准
+**/填报表
+**/元数据
+*.bat
+*.spec
+*.xlsx
+
+脚本/标准转换/处理表-分步
