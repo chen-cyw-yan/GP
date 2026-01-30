@@ -14,6 +14,14 @@ from datetime import datetime
 from dateutil.relativedelta import relativedelta
 from sqlalchemy import create_engine
 import pymysql
+import logging
+# 配置日志
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
 # 获取当前日期（不含时间）
 today = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
 
@@ -24,8 +32,8 @@ one_year_ago = today - relativedelta(years=1)
 start_date = one_year_ago.strftime("%Y%m%d")
 end_date = today.strftime("%Y%m%d")
 
-print("当前日期:", end_date)      # 如: 20260120
-print("近一年起始日期（一年前）:", start_date)  # 如: 20250120
+logger.info(f"当前日期：{end_date}")
+logger.info(f"近一年起始日期（一年前）：{start_date}")
 
 con = create_engine(f"mysql+pymysql://root:chen@127.0.0.1:3306/gp")
 conn = pymysql.connect(
@@ -65,12 +73,14 @@ def get_today_data():
     return df
 
 def get_stocks_year(stocks):
-    print("start get stock data")
+    logger.info('start get stock data')
     sizes=stocks.index.size
     a=0
-    print('需要获取数量',sizes)
+    # print()
+    logger.info(f"需要获取数量{sizes}")
     for k,v in stocks.iterrows():
-        print(f"{a}/{sizes}:",v['代码'],v['名称'])
+        logger.info(f"获取{a}/{sizes}:代码,{v['代码']};名称,{v['名称']}")
+        # print(f"{a}/{sizes}:",v['代码'],v['名称'])
         symbol = v['代码']
         stock_zh_a_daily_qfq_df = ak.stock_zh_a_daily(symbol=symbol, start_date=start_date, end_date=end_date, adjust="qfq")
         stock_zh_a_daily_qfq_df['code']=v['代码']
@@ -86,10 +96,11 @@ if __name__ == '__main__':
     get_basic_df=get_basic_df.sort_values(by='date')
     first_date = get_basic_df.iloc[0, 0].strftime("%Y-%m-%d")
     cnt=get_basic_df.index.size
-    print('起始时间',first_date,'应有数据',cnt)
-    sqls=f"""select count(1) as cnt,code from gp.stock where `date`>='{first_date}'  group by code  having count(1) <{cnt}"""
+    logger.info(f"起始时间:{first_date},应有数据：{cnt}")
+    sqls=f"""select count(1) as cnt,code from gp.stock where `date`>='{first_date}' and turnover!=0 group by code  having count(1) <{cnt}"""
     need_get_stock=pd.read_sql(sql=sqls,con=con)
     today_data_df=get_today_data()
     need_get_stock_df=today_data_df.loc[today_data_df['代码'].isin(need_get_stock['code'].to_list())]
-    print('need',need_get_stock,'today',today_data_df,'param',need_get_stock_df)
+    # print('need',need_get_stock,'today',today_data_df,'param',need_get_stock_df)
+    # logger.info(f"need:{need_get_stock},today：{today_data_df}，param，need_get_stock_df")
     get_stocks_year(need_get_stock_df)

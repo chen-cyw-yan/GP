@@ -69,5 +69,6 @@ if __name__ == '__main__':
     today_data_df['date']= today.strftime("%Y-%m-%d")
     today_data_df['outstanding_share']=0
     today_data_df['turnover']=0
+    print(today_data_df)
     sql = f"REPLACE INTO gp.stock(`{'`,`'.join(today_data_df.columns)}`) VALUES ({','.join(['%s' for _ in range(today_data_df.shape[1])])})"
     toSql(sql=sql, rows=today_data_df.values.tolist())
