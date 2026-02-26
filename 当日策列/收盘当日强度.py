@@ -204,12 +204,10 @@ def print_realtime_result(code, res):
 if __name__ == '__main__':
     logger.info('⏱ 开始扫描')
     watch_list = [
-        "sz000815",
-        "sz002358",
-        "sz002491",
-        "sz002606",
-        "sz002780",
-        "sz300265"
+        "sh603950",
+        'sz000021',
+        'sz002283',
+        'sh605289'
     ]
     res_df = []
     for code in watch_list:

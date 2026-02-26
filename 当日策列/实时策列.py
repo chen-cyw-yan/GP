@@ -267,11 +267,17 @@ def print_realtime_result(code, name, res):
 if __name__ == "__main__":
 
     watch_list = [
-        "sz002358",
+        "sh603950",
+        'sz000021',
+        'sz002283',
+        'sh605289'
     ]
 
     code_name_map = {
-        "sz002358": "森源电气",
+        "sh603950": "长源东谷",
+        'sz000021':"深科技",
+        'sz002283':'天润工业',
+        'sh605289':'罗曼股份'
     }
 
     scanner = AkshareRealtimeScanner(
@@ -291,7 +297,7 @@ if __name__ == "__main__":
             rows.append({
                 "股票": code,
                 "名称": name,
-                "时间": res["latest_time"],
+                # "时间": res["latest_time"],
                 "最新价": res["latest_price"],
                 "方向一致性": res["detail"]["方向一致性"]["score"],
                 "推价有效性": res["detail"]["推价有效性"]["score"],
