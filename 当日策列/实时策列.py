@@ -267,17 +267,13 @@ def print_realtime_result(code, name, res):
 if __name__ == "__main__":
 
     watch_list = [
-        "sh603950",
-        'sz000021',
-        'sz002283',
-        'sh605289'
+        'sh603757',
+        'sh600096'
     ]
 
     code_name_map = {
-        "sh603950": "长源东谷",
-        'sz000021':"深科技",
-        'sz002283':'天润工业',
-        'sh605289':'罗曼股份'
+        'sh603757':'大元泵业',
+        'sh600096':'云天化'
     }
 
     scanner = AkshareRealtimeScanner(

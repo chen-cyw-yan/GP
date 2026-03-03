@@ -15,7 +15,6 @@ from datetime import datetime
 from dateutil.relativedelta import relativedelta
 import pymysql
 import logging
-
 # ==============================
 # 日志配置
 # ==============================
