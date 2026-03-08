@@ -173,7 +173,7 @@ if __name__ == '__main__':
     SELECT count(1) as cnt, code 
     FROM gp.stock 
     WHERE `date`>='{first_date}' 
-      AND outstanding_share!=0 
+    --   AND outstanding_share!=0 
     GROUP BY code  
     HAVING count(1) < {cnt}
     """

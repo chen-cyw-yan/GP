@@ -7,6 +7,7 @@ import dataframe_image as dfi
 from telegram import Bot
 from telegram.utils.request import Request
 import time
+import numpy as np
 import akshare as ak
 import pandas as pd
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -26,7 +27,25 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 logger = logging.getLogger(__name__)
+conn = pymysql.connect(
+            host='127.0.0.1',
+            user='root',
+            password='chen',
+            database='gp',
+            # use_unicode=args.encoding,
+        )
+cursor = conn.cursor()
+def toSql(sql: str, rows: list):
+    """
+        连接数据库
+    """
+    # print(sql,rows)
+    try:
 
+        cursor.executemany(sql, rows)
+        conn.commit()
+    except Exception as e:
+        raise ConnectionError("[ERROR] 连接数据库失败，具体原因是：" + str(e))
 # ==============================
 # 数据库连接
 # ==============================
@@ -70,6 +89,32 @@ df=filter_stock.filer_stock()
     # 主程序
     # ==============================
 
+
+logger.info('运行策列完成....')
+logger.info('存储策列数据....')
+df_save=df
+df_save=df_save.rename(columns={"代码":'stock_code',
+"名称":'stock_name' ,
+"日期":'trade_date' ,
+"收盘价":'close_price' ,
+"触发信号次数":'trigger_count',
+"是否异动类型":'is_abnormal_type' ,
+"下一日可能触发":'next_day_may_trigger' ,
+"所需最小涨幅":'min_required_change' ,
+"目标等级":'target_level',
+"预警信息":'warning_info'})
+df_tmp = df_save.replace('', np.nan)
+df_tmp = df_tmp.astype(object).where(pd.notnull(df_tmp), None)
+
+rows_data = df_tmp.values.tolist()
+sql = f"""
+    REPLACE INTO gp.stock_abnormal_monitor(`{'`,`'.join(df_save.columns)}`)
+    VALUES ({','.join(['%s' for _ in range(df_save.shape[1])])})
+    """
+filter_stock.toSql(sql=sql, rows=rows_data)
+logger.info('存储策列完成....')
+
+
 image_path = "table.png"
 
 
@@ -103,6 +148,7 @@ else:
     # ===== 只取前50行生成图片 =====
 df_show = df.iloc[0:30]
 logger.info(f"{df_show.index.size}")
+
 
 dfi.export(df_show, image_path, max_rows=30)
 

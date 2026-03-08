@@ -138,7 +138,7 @@ def get_stocks_year_multithread(stocks_df, max_workers=6):
 
     # 合并成一个大 DataFrame
     big_df = pd.concat(all_results, ignore_index=True)
-
+    
     sql = f"""
     REPLACE INTO gp.stock(`{'`,`'.join(big_df.columns)}`)
     VALUES ({','.join(['%s' for _ in range(big_df.shape[1])])})

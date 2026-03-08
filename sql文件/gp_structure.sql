@@ -124,3 +124,41 @@ CREATE TABLE `tick_support_resistance` (
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
 -- Dump completed on 2026-02-26 17:17:45
+
+
+
+-- gp.stock_call_auction definition
+
+CREATE TABLE `stock_call_auction` (
+  `trade_date` date NOT NULL COMMENT '交易日期 (例如: 2023-10-27)',
+  `stock_code` varchar(10) NOT NULL COMMENT '股票代码 (例如: sh600000)',
+  `stock_name` varchar(50) DEFAULT NULL COMMENT '股票名称 (例如: 浦发银行)',
+  `auction_time` time DEFAULT NULL COMMENT '竞价时间 (固定为 09:25:00)',
+  `volume` bigint DEFAULT NULL COMMENT '成交量 (19396)',
+  `amount` bigint DEFAULT NULL COMMENT '成交金额 (26844064)',
+  `nature` varchar(10) DEFAULT NULL COMMENT '性质 (买盘/卖盘)',
+  `create_time` datetime DEFAULT CURRENT_TIMESTAMP COMMENT '数据入库时间',
+  PRIMARY KEY (`trade_date`,`stock_code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='集合竞价结束数据表 (无价格版)';
+
+
+
+-- gp.stock_abnormal_monitor definition
+
+CREATE TABLE `stock_abnormal_monitor` (
+  `stock_code` varchar(20) NOT NULL COMMENT '股票代码，例如 sh601179 或 sz002355',
+  `stock_name` varchar(50) DEFAULT NULL COMMENT '股票名称',
+  `trade_date` date NOT NULL COMMENT '交易日期，格式 YYYY-MM-DD',
+  `close_price` decimal(10,4) DEFAULT NULL COMMENT '当日收盘价',
+  `trigger_count` int DEFAULT '0' COMMENT '触发信号次数',
+  `is_abnormal_type` varchar(100) DEFAULT NULL COMMENT '是否异动类型描述，如 "3日涨跌幅异常(24.76%)" 或 NULL',
+  `next_day_may_trigger` varchar(10) DEFAULT '0' COMMENT '下一日是否可能触发异动标识: 1=是(True), 0=否(False)',
+  `min_required_change` decimal(10,6) DEFAULT NULL COMMENT '下一日触发异动所需的最小涨幅比例 (小数形式，如 0.088497)',
+  `target_level` varchar(50) DEFAULT NULL COMMENT '目标异动等级，如 "5日异动", "3日异动", "10日异动"',
+  `warning_info` varchar(255) DEFAULT NULL COMMENT '预警详细信息，如 "明日若涨 8.85% 将触发5日异动"',
+  `create_time` datetime DEFAULT CURRENT_TIMESTAMP COMMENT '记录创建时间',
+  `update_time` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '记录更新时间',
+  PRIMARY KEY (`trade_date`,`stock_code`) COMMENT '联合主键：日期 + 股票代码，确保同一天同一只股票唯一',
+  KEY `idx_next_day_trigger` (`next_day_may_trigger`) COMMENT '快速筛选下一日可能触发的股票',
+  KEY `idx_target_level` (`target_level`) COMMENT '按目标等级查询的索引'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='股票异动监控与预警数据表 (无ID版)';
