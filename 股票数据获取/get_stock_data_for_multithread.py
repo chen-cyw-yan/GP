@@ -188,7 +188,8 @@ if __name__ == '__main__':
 
     logger.info(f"需要补充股票数量: {len(need_get_stock_df)}")
 
-    get_stocks_year_multithread(need_get_stock_df, max_workers=6)
+    get_stocks_year_multithread(need_get_stock_df, max_workers=4
+                                )
 
     cursor.close()
     conn.close()

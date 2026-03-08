@@ -11,7 +11,7 @@ import matplotlib.dates as mdates
 from io import BytesIO
 import platform
 import locale
-# import filter_stock
+import filter_stock
 # 忽略警告
 warnings.filterwarnings("ignore", category=UserWarning)
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -431,28 +431,40 @@ if __name__ == "__main__":
     TG_TOKEN = "8760053592:AAGt8DcQ9_5Gu1OhwWYWtYz1IkHYHFXxL20"
     TG_CHAT_ID = "-1003787641029"
     PROXY_URL = "http://127.0.0.1:7890" 
+    dfs=filter_stock.filer_stock()
+    print(dfs.index.size,dfs.iloc[0,:])
+    today = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
+    # dfs['日期']=dfs['日期'].
+    dfs=dfs.loc[dfs['日期'].astype(str) == today.strftime('%Y-%m-%d')]
 
-    stock_code = 'sz000731'
-    stock_name = '四川美丰'
+    dfs.to_excel('1.xlsx')
+    print(today.strftime('%Y-%m-%d'))
 
-    print(f"正在获取 {stock_name} ({stock_code}) 数据...")
-        
-    try:
-        df = ak.stock_zh_a_tick_tx_js(symbol=stock_code)
-    except Exception as e:
-        print(f"数据获取失败：{e}")
+    if dfs.empty:
+        print("今日无数据")
         exit()
+    for k,v in dfs.iterrows():
 
-    analyzer = FinalQuantAnalyzer(df, stock_info={'code': stock_code, 'name': stock_name})
-    report_text, density_img, fundflow_img = analyzer.run_full_analysis()
-    print(report_text)
+        stock_code = v['代码']
+        stock_name = v['名称']
+
+        print(f"正在获取 {stock_name} ({stock_code}) 数据...")
         
-    # print("\n--- 报告生成完成，正在发送至 Telegram ---")
+        try:
+            df = ak.stock_zh_a_tick_tx_js(symbol=stock_code)
+        except Exception as e:
+            print(f"数据获取失败：{e}")
+            exit()
+
+        analyzer = FinalQuantAnalyzer(df, stock_info={'code': stock_code, 'name': stock_name})
+        report_text, density_img, fundflow_img = analyzer.run_full_analysis()
         
-    # images_to_send = []
-    # if density_img: images_to_send.append(density_img)
-    # if fundflow_img: images_to_send.append(fundflow_img)
+        print("\n--- 报告生成完成，正在发送至 Telegram ---")
         
-    # send_telegram_message_with_images(TG_TOKEN, TG_CHAT_ID, report_text, images_to_send, proxy_url=PROXY_URL)
+        images_to_send = []
+        if density_img: images_to_send.append(density_img)
+        if fundflow_img: images_to_send.append(fundflow_img)
         
-    # print("✅ 报告及图表已成功推送至 Telegram!")
+        send_telegram_message_with_images(TG_TOKEN, TG_CHAT_ID, report_text, images_to_send, proxy_url=PROXY_URL)
+        
+        print("✅ 报告及图表已成功推送至 Telegram!")
