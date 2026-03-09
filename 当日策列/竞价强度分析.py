@@ -364,4 +364,4 @@ if __name__ == "__main__":
     res_df.rename(columns=factor_name_map, inplace=True)
     res_df = res_df[["股票代码", "股票名称", "信号日期", "竞价评分", "是否入选", "竞价涨幅", "竞价量比", "竞价换手率","竞价金额放大倍数", "竞价资金占昨日成交比", "竞价位置", "竞价金额强度", "竞价资金密度"]]
     res_df.sort_values(by="竞价评分", ascending=False, inplace=True)
-    res_df.to_excel(r"C:\Users\cyw\Desktop\jupyternotebook\git-python\GP\当日策列\竞价分析.xlsx", index=False)
+    res_df.to_excel(r"竞价分析.xlsx", index=False)

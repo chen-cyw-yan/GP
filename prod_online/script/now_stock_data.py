@@ -22,10 +22,16 @@ from datetime import datetime
 from dateutil.relativedelta import relativedelta
 from sqlalchemy import create_engine
 import pymysql
+import logging
 import prod_online.config.utils as utils
 # 获取当前日期（不含时间）
 today = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
-
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
 # 计算一年前的日期（精确回退12个月）
 one_year_ago = today - relativedelta(years=1)
 
