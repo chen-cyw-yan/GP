@@ -3,6 +3,14 @@
 # @Time : 2026/2/28 11:35
 # @Author : chenyanwen
 # @email:1183445504@qq.com
+import sys
+import os
+
+sys.path.append(
+    os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "../../")
+    )
+)
 import dataframe_image as dfi
 from telegram import Bot
 from telegram.utils.request import Request
@@ -16,8 +24,9 @@ from datetime import datetime
 from dateutil.relativedelta import relativedelta
 import pymysql
 import logging
-import update_stock_date
-import filter_stock
+import prod_online.services.update_stock_date as update_stock_date
+import prod_online.services.filter_stock as filter_stock
+import prod_online.config.utils as utils
 # ==============================
 # 日志配置
 # ==============================
@@ -34,6 +43,14 @@ conn = pymysql.connect(
             database='gp',
             # use_unicode=args.encoding,
         )
+today_dt = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
+today_str = today_dt.strftime("%Y-%m-%d")
+    # today_str ='2026-03-06'
+logger.info(f"当前任务日期: {today_str}")
+
+if not utils.is_trading_day_ak(today_str):
+    logger.warning(f"⚠️ {today_str} 不是 A 股交易日，程序安全退出。")
+    sys.exit(0)
 cursor = conn.cursor()
 def toSql(sql: str, rows: list):
     """

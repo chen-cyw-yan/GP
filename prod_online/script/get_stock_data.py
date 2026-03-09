@@ -6,6 +6,14 @@ import tqdm
 import random
 # import pyecharts.options as opts
 # from pyecharts.charts import Line
+import sys
+import os
+
+sys.path.append(
+    os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "../../")
+    )
+)
 import pandas as pd
 from sqlalchemy import create_engine
 from sklearn.linear_model import LinearRegression
@@ -15,6 +23,7 @@ from dateutil.relativedelta import relativedelta
 from sqlalchemy import create_engine
 import pymysql
 import logging
+import prod_online.config.utils as utils
 # 配置日志
 logging.basicConfig(
     level=logging.INFO,
@@ -159,6 +168,22 @@ def build_support_resistance_table(
 
 
 if __name__ == '__main__':
+    today_dt = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
+    today_str = today_dt.strftime("%Y-%m-%d")
+    # today_str ='2026-03-06'
+    logger.info(f"当前任务日期: {today_str}")
+
+    if not utils.is_trading_day_ak(today_str):
+        logger.warning(f"⚠️ {today_str} 不是 A 股交易日，程序安全退出。")
+        sys.exit(0)
+    today_dt = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
+    today_str = today_dt.strftime("%Y-%m-%d")
+    # today_str ='2026-03-06'
+    logger.info(f"当前任务日期: {today_str}")
+
+    if not utils.is_trading_day_ak(today_str):
+        logger.warning(f"⚠️ {today_str} 不是 A 股交易日，程序安全退出。")
+        sys.exit(0)
     code='sh601398'
     get_basic_df=get_basic_data(code)
     get_basic_df=get_basic_df.sort_values(by='date')

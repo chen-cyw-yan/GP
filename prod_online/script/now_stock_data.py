@@ -6,6 +6,14 @@ import tqdm
 import random
 # import pyecharts.options as opts
 # from pyecharts.charts import Line
+import sys
+import os
+
+sys.path.append(
+    os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "../../")
+    )
+)
 import pandas as pd
 from sqlalchemy import create_engine
 from sklearn.linear_model import LinearRegression
@@ -14,6 +22,7 @@ from datetime import datetime
 from dateutil.relativedelta import relativedelta
 from sqlalchemy import create_engine
 import pymysql
+import prod_online.config.utils as utils
 # 获取当前日期（不含时间）
 today = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
 
@@ -63,6 +72,14 @@ def get_today_data():
     return df
 
 if __name__ == '__main__':
+    today_dt = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
+    today_str = today_dt.strftime("%Y-%m-%d")
+    # today_str ='2026-03-06'
+    logger.info(f"当前任务日期: {today_str}")
+
+    if not utils.is_trading_day_ak(today_str):
+        logger.warning(f"⚠️ {today_str} 不是 A 股交易日，程序安全退出。")
+        sys.exit(0)
     today_data_df=get_today_data()
     today_data_df=today_data_df[["代码","名称","最新价","今开","最高","最低","成交量","成交额"]]
     today_data_df=today_data_df.rename(columns={"代码":"code","名称":"name", "最新价":"close" ,"今开":"open","最高":"high", "最低":"low", "成交量":"volume", "成交额":"amount"})

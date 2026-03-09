@@ -4,6 +4,14 @@
 # @Author : chenyanwen
 # @email:1183445504@qq.com
 import time
+import sys
+import os
+
+sys.path.append(
+    os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "../../")
+    )
+)
 import akshare as ak
 import pandas as pd
 import numpy as np
@@ -15,6 +23,7 @@ from datetime import datetime
 from dateutil.relativedelta import relativedelta
 import pymysql
 import logging
+import prod_online.config.utils as utils
 # ==============================
 # 日志配置
 # ==============================
@@ -156,6 +165,14 @@ def get_stocks_year_multithread(stocks_df, max_workers=6):
 # ==============================
 if __name__ == '__main__':
 
+    today_dt = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
+    today_str = today_dt.strftime("%Y-%m-%d")
+    # today_str ='2026-03-06'
+    logger.info(f"当前任务日期: {today_str}")
+
+    if not utils.is_trading_day_ak(today_str):
+        logger.warning(f"⚠️ {today_str} 不是 A 股交易日，程序安全退出。")
+        sys.exit(0)
     code = 'sh601398'
     basic_df = ak.stock_zh_a_daily(
         symbol=code,
@@ -172,7 +189,7 @@ if __name__ == '__main__':
     sqls = f"""
     SELECT count(1) as cnt, code 
     FROM gp.stock 
-    WHERE `date`>='{first_date}' 
+    WHERE `date`>'{first_date}' 
     --   AND outstanding_share!=0 
     GROUP BY code  
     HAVING count(1) < {cnt}
@@ -188,7 +205,7 @@ if __name__ == '__main__':
 
     logger.info(f"需要补充股票数量: {len(need_get_stock_df)}")
 
-    get_stocks_year_multithread(need_get_stock_df, max_workers=4
+    get_stocks_year_multithread(need_get_stock_df, max_workers=8
                                 )
 
     cursor.close()

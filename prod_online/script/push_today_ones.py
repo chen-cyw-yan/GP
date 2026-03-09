@@ -1,4 +1,12 @@
 import pandas as pd
+import sys
+import os
+
+sys.path.append(
+    os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "../../")
+    )
+)
 import numpy as np
 from datetime import datetime, time, timedelta
 import logging
@@ -11,11 +19,19 @@ import matplotlib.dates as mdates
 from io import BytesIO
 import platform
 import locale
-import filter_stock
+import prod_online.services.filter_stock as filter_stock
+import prod_online.config.utils as utils
 # 忽略警告
 warnings.filterwarnings("ignore", category=UserWarning)
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+today_dt = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
+today_str = today_dt.strftime("%Y-%m-%d")
+# today_str ='2026-03-06'
+logger.info(f"当前任务日期: {today_str}")
 
+if not utils.is_trading_day_ak(today_str):
+    logger.warning(f"⚠️ {today_str} 不是 A 股交易日，程序安全退出。")
+    sys.exit(0)
 # ================= 配置 Matplotlib 中文显示 =================
 def setup_matplotlib_font():
     """自动设置适合当前操作系统的中文字体"""
