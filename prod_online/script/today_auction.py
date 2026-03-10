@@ -314,7 +314,7 @@ def analyze_stock(row, trade_date):
             trade_side = "买卖平衡"
 
         # 前三天竞价成交量
-        last3_vol = df2.head(3)["volume"].sum()
+        last3_vol = df2.head(3)["volume"].mean()
         
         result = analyze_auction(df1, df2, df3)
         result["today_auction_vol"] = today_auction_vol
@@ -390,7 +390,7 @@ if __name__ == "__main__":
     "score": "竞价评分",
     "selected": "是否入选",
     "today_auction_vol": "当天竞价成交量",
-    "last3_auction_vol": "前三天竞价成交量",
+    "last3_auction_vol": "前三天竞价平均成交量",
     "trade_side": "当天成交买卖性质",
     }
     res_df.rename(columns=factor_name_map, inplace=True)
@@ -400,7 +400,7 @@ if __name__ == "__main__":
                 "股票名称",
                 "信号日期",
                 "当天竞价成交量",
-                "前三天竞价成交量",
+                "前三天竞价平均成交量",
                 "当天成交买卖性质",
                 "竞价评分",
                 "是否入选",
