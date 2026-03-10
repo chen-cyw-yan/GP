@@ -5,14 +5,16 @@
 # @email:1183445504@qq.com
 import sys
 import os
-
-# sys.path.append(
-#     os.path.abspath(
-#         os.path.join(os.path.dirname(__file__), "../../")
-#     )
-# )
+import dataframe_image as dfi
+sys.path.append(
+    os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "../../")
+    )
+)
+import json
+from prod_online.config.feishu_utils import FeishuUtils
 import warnings
-
+import prod_online.config.utils as utils
 import pandas as pd
 import requests
 import time
@@ -276,7 +278,7 @@ def analyze_stock(row, trade_date):
 
         sql2 = f'''
         select * from gp.stock_call_auction
-        where stock_code="{ts_code} order by trade_date desc limit 20 "
+        where stock_code="{ts_code}" order by trade_date desc limit 20
         '''
         df2 = pd.read_sql(sql2, engine)
         df2['volume']=df2['volume']*100
@@ -295,14 +297,32 @@ def analyze_stock(row, trade_date):
         df3 = pd.read_sql(sql3, engine)
         df3['volume']=df3['volume']*100
         if df1.empty or df2.empty or df3.empty:
+            print(df1.empty , df2.empty , df3.empty)
             return None
+        # 当天竞价成交量
+        today_auction_vol = df1["成交量"].sum()
 
+        # 当天买卖性质
+        buy_vol = df1[df1["性质"]=="买盘"]["成交量"].sum()
+        sell_vol = df1[df1["性质"]=="卖盘"]["成交量"].sum()
+
+        if buy_vol > sell_vol:
+            trade_side = "买盘主导"
+        elif sell_vol > buy_vol:
+            trade_side = "卖盘主导"
+        else:
+            trade_side = "买卖平衡"
+
+        # 前三天竞价成交量
+        last3_vol = df2.head(3)["volume"].sum()
+        
         result = analyze_auction(df1, df2, df3)
-
+        result["today_auction_vol"] = today_auction_vol
+        result["last3_auction_vol"] = last3_vol
+        result["trade_side"] = trade_side
         result["stock_code"] = ts_code
         result["stock_name"] = row["stock_name"]
         result["signal_date"] = row["trade_date"]
-
         return result
 
     except Exception as e:
@@ -311,8 +331,16 @@ def analyze_stock(row, trade_date):
 
 if __name__ == "__main__":
 
-    trade_date = "2026-03-06"
+    today_dt = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
+    today_str = today_dt.strftime("%Y-%m-%d")
+    # today_str ='2026-03-06'
+    logger.info(f"当前任务日期: {today_str}")
 
+    if not utils.is_trading_day_ak(today_str):
+        logger.warning(f"⚠️ {today_str} 不是 A 股交易日，程序安全退出。")
+        sys.exit(0)
+    trade_date=utils.get_prev_n_trading_days(n=3)
+    trade_date=trade_date[0]
     sql = f'''
     select * from gp.stock_abnormal_monitor
     where trade_date >= "{trade_date}"
@@ -322,7 +350,7 @@ if __name__ == "__main__":
 
     results = []
 
-    max_workers = 5
+    max_workers = 8
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
 
@@ -343,6 +371,7 @@ if __name__ == "__main__":
                 print("线程异常", e)
 
     res_df = pd.DataFrame(results)
+    # print(res_df)
     factor_name_map = {
     "stock_code":'股票代码',
     'stock_name': '股票名称',
@@ -359,10 +388,43 @@ if __name__ == "__main__":
     "auction_amt_ratio": "竞价金额放大倍数",
     "auction_vs_yesterday": "竞价资金占昨日成交比",
     "score": "竞价评分",
-    "selected": "是否入选"
+    "selected": "是否入选",
+    "today_auction_vol": "当天竞价成交量",
+    "last3_auction_vol": "前三天竞价成交量",
+    "trade_side": "当天成交买卖性质",
     }
     res_df.rename(columns=factor_name_map, inplace=True)
-    res_df = res_df[["股票代码", "股票名称", "信号日期", "竞价评分", "是否入选", "竞价涨幅", "竞价量比", "竞价换手率","竞价金额放大倍数", "竞价资金占昨日成交比", "竞价位置", "竞价金额强度", "竞价资金密度"]]
+    res_df = res_df[
+                [
+                "股票代码",
+                "股票名称",
+                "信号日期",
+                "当天竞价成交量",
+                "前三天竞价成交量",
+                "当天成交买卖性质",
+                "竞价评分",
+                "是否入选",
+                "竞价涨幅",
+                "竞价量比",
+                "竞价换手率",
+                "竞价金额放大倍数",
+                "竞价资金占昨日成交比",
+                "竞价位置",
+                "竞价金额强度",
+                "竞价资金密度"
+                ]
+                ]
     res_df.sort_values(by="竞价评分", ascending=False, inplace=True)
-    res_df.to_excel(r"竞价分析.xlsx", index=False)
-    print(res_df)
+    res_df=res_df.drop_duplicates()
+    image_path='prod_online/imges/auction.png'
+    dfi.export(res_df, image_path, max_rows=100)
+    fs_client=FeishuUtils('cli_a9256b2aef7a5cd4','t22QBXS6MVqsXC41GoCDvbxin0tpXyL3')
+    message=f"""竞价强度分析，生成日期：{today_str}"""
+    context={
+        "text":message
+    }
+    fs_client.set_message_for_text('chat_id','oc_cd642a7fec1dcd847e91b2e1775809d2',json.dumps(context))
+    fs_client.set_message_for_image('chat_id', 'oc_cd642a7fec1dcd847e91b2e1775809d2',
+                                      image_path)
+    # res_df.to_excel(r"竞价分析.xlsx", index=False)
+    # print(res_df)
