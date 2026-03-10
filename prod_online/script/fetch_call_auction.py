@@ -265,7 +265,7 @@ def fetch_and_save_stock(row, timeout_seconds=60):
 # ==============================
 # 多线程主控 (含熔断休息机制)
 # ==============================
-def run_multithread_task(stocks_df, max_workers=4, timeout_limit=60, rest_time=60):
+def run_multithread_task(stocks_df, max_workers=8, timeout_limit=60, rest_time=60):
     logger.info(f"📊 任务开始：共 {len(stocks_df)} 只股票，线程数: {max_workers}")
     
     success_count = 0
