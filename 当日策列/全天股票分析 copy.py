@@ -204,7 +204,7 @@ class FinalQuantAnalyzer:
         self._log(f"- 价格：`{o_p:.2f}` → `{c_p:.2f}`")
 
     def run_full_analysis(self):
-        self.analyze_period("开盘后15分钟", "09:30:00", "09:45:00")
+        self.analyze_period("开盘后15分钟", "09:20:00", "09:45:00")
         self.analyze_period("收盘前15分钟", "14:45:00", "15:00:00")
         
         self._log(f"\n---\n")
@@ -432,8 +432,8 @@ if __name__ == "__main__":
     TG_CHAT_ID = "-1003787641029"
     PROXY_URL = "http://127.0.0.1:7890" 
 
-    stock_code = 'sz000731'
-    stock_name = '四川美丰'
+    stock_code = 'sh605298'
+    stock_name = '必得科技'
 
     print(f"正在获取 {stock_name} ({stock_code}) 数据...")
         

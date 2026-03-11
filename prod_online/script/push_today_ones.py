@@ -225,9 +225,130 @@ class FinalQuantAnalyzer:
         self._log(f"\n**📈 区间表现**")
         self._log(f"- 状态：{status_text}")
         self._log(f"- 价格：`{o_p:.2f}` → `{c_p:.2f}`")
+    def detect_main_force_behavior(self):
+        df = self.df.copy()
+        if df.empty:
+            return "无法判断", {}
+
+        # ===== 1 资金结构 =====
+        large_buy = df[(df['is_large']) & (df['type_code'] == 1)]['成交金额'].sum()
+        large_sell = df[(df['is_large']) & (df['type_code'] == -1)]['成交金额'].sum()
+
+        small_buy = df[(df['is_small']) & (df['type_code'] == 1)]['成交金额'].sum()
+        small_sell = df[(df['is_small']) & (df['type_code'] == -1)]['成交金额'].sum()
+
+        large_net = large_buy - large_sell
+        small_net = small_buy - small_sell
+
+        total_amt = df['成交金额'].sum()
+
+        # ===== 2 主力参与度 =====
+        large_ratio = (large_buy + large_sell) / total_amt if total_amt > 0 else 0
+
+        # ===== 3 价格变化 =====
+        open_price = df['成交价格'].iloc[0]
+        close_price = df['成交价格'].iloc[-1]
+
+        price_change = (close_price - open_price) / open_price
+
+        # ===== 行为判断 =====
+
+        # 主力吸筹
+        if large_net > 0 and price_change < 0.01:
+            behavior = "🟢 主力吸筹"
+
+        # 主力拉升
+        elif large_net > 0 and price_change > 0.02:
+            behavior = "🚀 主力拉升"
+
+        # 主力派发
+        elif large_net < 0 and price_change > 0:
+            behavior = "⚠️ 主力派发"
+
+        # 主力砸盘
+        elif large_net < 0 and price_change < -0.02:
+            behavior = "🔴 主力砸盘"
+
+        # 对倒
+        elif large_ratio > 0.5 and abs(large_net) < total_amt * 0.02:
+            behavior = "🌀 主力对倒"
+
+        else:
+            behavior = "⚖️ 多空博弈"
+
+        details = {
+            "large_net": large_net,
+            "small_net": small_net,
+            "large_ratio": large_ratio,
+            "price_change": price_change
+        }
+
+        return behavior, details
+    def detect_main_force_action(self):
+
+        df = self.df.copy()
+
+        large_buy = df[(df['is_large']) & (df['type_code']==1)]['成交金额'].sum()
+        large_sell = df[(df['is_large']) & (df['type_code']==-1)]['成交金额'].sum()
+
+        small_buy = df[(df['is_small']) & (df['type_code']==1)]['成交金额'].sum()
+        small_sell = df[(df['is_small']) & (df['type_code']==-1)]['成交金额'].sum()
+
+        large_net = large_buy - large_sell
+        small_net = small_buy - small_sell
+
+        total_amt = df['成交金额'].sum()
+
+        large_ratio = (large_buy + large_sell) / total_amt if total_amt>0 else 0
+
+        open_price = df['成交价格'].iloc[0]
+        close_price = df['成交价格'].iloc[-1]
+
+        price_change = (close_price-open_price)/open_price
+
+        push_score,_ = self.calculate_push_score_custom(df)
+
+        # ===== 动作判断 =====
+
+        # 吸筹
+        if large_net>0 and price_change<0.01 and large_ratio>0.3:
+            action="🟢 主力吸筹"
+
+        # 洗盘
+        elif large_net<0 and abs(price_change)<0.02 and large_ratio>0.35:
+            action="🧹 主力洗盘"
+
+        # 试盘
+        elif large_net>0 and 0.01<price_change<0.03 and push_score<12:
+            action="🧪 主力试盘"
+
+        # 拉升
+        elif large_net>0 and price_change>0.03 and push_score>=15:
+            action="🚀 主力拉升"
+
+        # 派发
+        elif large_net<0 and price_change>0.01:
+            action="📦 主力派发"
+
+        # 对倒
+        elif large_ratio>0.5 and abs(large_net)<total_amt*0.02:
+            action="🔁 主力对倒"
+
+        else:
+            action="⚖️ 多空博弈"
+
+        details={
+            "large_net":large_net,
+            "small_net":small_net,
+            "large_ratio":large_ratio,
+            "price_change":price_change,
+            "push_score":push_score
+        }
+
+        return action,details
 
     def run_full_analysis(self):
-        self.analyze_period("开盘后15分钟", "09:30:00", "09:45:00")
+        self.analyze_period("开盘后15分钟", "09:20:00", "09:45:00")
         self.analyze_period("收盘前15分钟", "14:45:00", "15:00:00")
         
         self._log(f"\n---\n")
@@ -263,6 +384,30 @@ class FinalQuantAnalyzer:
         self._log(f"- 🎯 全天推价有效性：`{push_score:.2f} / 25.00`")
         self._log(f"  *(细节：上涨占比 `{details['push_ratio']:.1%}`, 连涨 `{details['max_up_streak']}` 笔)*")
         
+
+
+        action,details = self.detect_main_force_action()
+
+        self._log("\n**🎬 主力动作识别**")
+
+        self._log(f"- 动作判断：`{action}`")
+
+        self._log(f"- 主力净流：`{details['large_net']:,.0f}`")
+        self._log(f"- 散户净流：`{details['small_net']:,.0f}`")
+        self._log(f"- 主力参与度：`{details['large_ratio']:.1%}`")
+
+        self._log(f"- 推价评分：`{details['push_score']}`")
+        self._log(f"- 日内涨跌：`{details['price_change']:.2%}`")
+        
+        behavior, details = self.detect_main_force_behavior()
+
+        self._log(f"\n**🧠 主力行为识别**")
+        self._log(f"- 行为判断：`{behavior}`")
+        self._log(f"- 大单净流：`{details['large_net']:,.0f}`")
+        self._log(f"- 小单净流：`{details['small_net']:,.0f}`")
+        self._log(f"- 主力参与度：`{details['large_ratio']:.1%}`")
+        self._log(f"- 日内涨跌：`{details['price_change']:.2%}`")
+
         conclusion = ""
         icon = ""
         if all_l_net > 0 and sup_score >= 0.7 and push_score >= 15:
@@ -277,7 +422,9 @@ class FinalQuantAnalyzer:
         else:
             conclusion = "【震荡观察】多空博弈，等待方向选择。"
             icon = "⚖️"
-            
+        
+
+
         self._log(f"\n---")
         self._log(f"## {icon} 综合研判结论")
         self._log("---")
@@ -287,7 +434,7 @@ class FinalQuantAnalyzer:
         
         density_img = self._generate_density_plot()
         fundflow_img = self._generate_fundflow_plot()
-        
+
         return report_text, density_img, fundflow_img
 
     def get_report(self, format_type="markdown"):
