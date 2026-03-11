@@ -11,6 +11,7 @@ sys.path.append(
         os.path.join(os.path.dirname(__file__), "../../")
     )
 )
+import json
 import dataframe_image as dfi
 from telegram import Bot
 from telegram.utils.request import Request
@@ -27,6 +28,7 @@ import logging
 import prod_online.services.update_stock_date as update_stock_date
 import prod_online.services.filter_stock as filter_stock
 import prod_online.config.utils as utils
+from prod_online.config.feishu_utils import FeishuUtils
 # ==============================
 # 日志配置
 # ==============================
@@ -164,6 +166,7 @@ else:
     # 先导出图片
     # ===== 只取前50行生成图片 =====
 df_show = df.iloc[0:30]
+df = df.iloc[0:100]
 logger.info(f"{df_show.index.size}")
 
 
@@ -178,7 +181,7 @@ with open(image_path, "rb") as f:
         )
 
     # ===== 同时发送完整Excel =====
-excel_path = "result.xlsx"
+excel_path = "prod_online/imges/result.xlsx"
 df.to_excel(excel_path, index=False)
 
 with open(excel_path, "rb") as f:
@@ -186,3 +189,11 @@ with open(excel_path, "rb") as f:
             chat_id=CHAT_ID,
             document=f
         )
+fs_client=FeishuUtils('cli_a9256b2aef7a5cd4','t22QBXS6MVqsXC41GoCDvbxin0tpXyL3')
+context={
+        "text":message
+    }
+fs_client.set_message_for_text('chat_id','oc_cd642a7fec1dcd847e91b2e1775809d2',json.dumps(context))
+fs_client.set_message_for_image('chat_id', 'oc_cd642a7fec1dcd847e91b2e1775809d2',
+                                      image_path)
+fs_client.set_message_for_file('chat_id', 'oc_cd642a7fec1dcd847e91b2e1775809d2',excel_path,'result.xlsx')

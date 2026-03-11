@@ -100,6 +100,55 @@ class FeishuUtils:  # 【建议】类名首字母大写，符合 Python 规范
             return 'send image error!!'
 
         return 'send img success!!'
+    
+    def set_message_for_file(self, receive_id_type, receive_id, file_path, file_name):
+            if not os.path.exists(file_path):
+                lark.logger.error(f"File not found: {file_path}")
+                return 'file not found!!'
+
+            try:
+                with open(file_path, "rb") as f:
+                    # ⚠️ 注意：文件上传 API 在 drive.v1，不是 file.v1！
+                    request = CreateFileRequest.builder() \
+                        .request_body(CreateFileRequestBody.builder()
+                            .file_type("xlsx")  # 或 "xls", "pdf" 等
+                            .file_name(file_name)
+                            .file(f)
+                            .build()) \
+                        .build()
+
+                    response: CreateFileResponse = self.client.im.v1.file.create(request)  # ← 关键：drive.v1.file
+
+                    if not response.success():
+                        lark.logger.error(f"Upload file failed: {response.code} - {response.msg}")
+                        return 'upload file error!!'
+
+                    file_key = response.data.file_key
+                    lark.logger.info(f"File uploaded, key: {file_key}")
+
+            except Exception as e:
+                lark.logger.error(f"Error reading file: {str(e)}")
+                return 'read file error!!'
+
+            # 发送文件消息
+            content = json.dumps({"file_key": file_key}, ensure_ascii=False)
+            msg_request = CreateMessageRequest.builder() \
+                .receive_id_type(receive_id_type) \
+                .request_body(CreateMessageRequestBody.builder()
+                    .receive_id(receive_id)
+                    .msg_type("file")
+                    .content(content)
+                    .uuid(str(uuid.uuid4()))
+                    .build()) \
+                .build()
+
+            resp = self.client.im.v1.message.create(msg_request)
+            if not resp.success():
+                lark.logger.error(f"Send file message failed: {resp.code} - {resp.msg}")
+                return 'send file error!!'
+
+            return 'send file success!!'
+
 
 
 if __name__ == '__main__':
@@ -113,11 +162,21 @@ if __name__ == '__main__':
     # res = fs_client.set_message_for_text('chat_id', 'oc_cd642a7fec1dcd847e91b2e1775809d2', "Hello World from Python!")
     
     # 测试图片
-    img_path = r"C:\Users\cyw\Desktop\jupyternotebook\git-python\GP\charts\sh600468.png"
+    # img_path = r"C:\Users\cyw\Desktop\jupyternotebook\git-python\GP\charts\sh600468.png"
+    
+    # # 检查文件是否存在再运行，避免报错
+    # if os.path.exists(img_path):
+    #     res = fs_client.set_message_for_image('chat_id', 'oc_cd642a7fec1dcd847e91b2e1775809d2', img_path)
+    #     print(res)
+    # else:
+    #     print(f"测试文件不存在: {img_path}")
+
+    # 测试文件
+    file_path = r"C:\Users\cyw\Desktop\jupyternotebook\git-python\GP\prod_online\script\result.xlsx"
     
     # 检查文件是否存在再运行，避免报错
-    if os.path.exists(img_path):
-        res = fs_client.set_message_for_image('chat_id', 'oc_cd642a7fec1dcd847e91b2e1775809d2', img_path)
+    if os.path.exists(file_path):
+        res = fs_client.set_message_for_file('chat_id', 'oc_cd642a7fec1dcd847e91b2e1775809d2', file_path,'result.xlsx')
         print(res)
     else:
-        print(f"测试文件不存在: {img_path}")
+        print(f"测试文件不存在: {file_path}")

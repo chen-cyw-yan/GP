@@ -426,5 +426,5 @@ if __name__ == "__main__":
     fs_client.set_message_for_text('chat_id','oc_cd642a7fec1dcd847e91b2e1775809d2',json.dumps(context))
     fs_client.set_message_for_image('chat_id', 'oc_cd642a7fec1dcd847e91b2e1775809d2',
                                       image_path)
-    # res_df.to_excel(r"竞价分析.xlsx", index=False)
+    res_df.to_excel(r"prod_online/imges/竞价分析.xlsx", index=False)
     # print(res_df)
