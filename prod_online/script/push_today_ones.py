@@ -1,7 +1,7 @@
 import pandas as pd
 import sys
 import os
-
+from sqlalchemy import create_engine
 sys.path.append(
     os.path.abspath(
         os.path.join(os.path.dirname(__file__), "../../")
@@ -35,7 +35,7 @@ today_dt = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
 today_str = today_dt.strftime("%Y-%m-%d")
 # today_str ='2026-03-06'
 logger.info(f"当前任务日期: {today_str}")
-
+engine = create_engine("mysql+pymysql://root:chen@127.0.0.1:3306/gp")
 if not utils.is_trading_day_ak(today_str):
     logger.warning(f"⚠️ {today_str} 不是 A 股交易日，程序安全退出。")
     sys.exit(0)
@@ -346,6 +346,94 @@ class FinalQuantAnalyzer:
         }
 
         return action,details
+    def detect_main_force_strategy(self):
+
+        df = self.df.copy()
+
+        large_buy = df[(df['is_large']) & (df['type_code']==1)]['成交金额'].sum()
+        large_sell = df[(df['is_large']) & (df['type_code']==-1)]['成交金额'].sum()
+
+        large_net = large_buy - large_sell
+
+        total_amt = df['成交金额'].sum()
+
+        large_ratio = (large_buy+large_sell)/total_amt if total_amt>0 else 0
+
+        open_p = df['成交价格'].iloc[0]
+        close_p = df['成交价格'].iloc[-1]
+
+        price_change = (close_p-open_p)/open_p
+
+        volatility = df['成交价格'].pct_change().std()
+
+        push_score,_ = self.calculate_push_score_custom(df)
+
+        # ===== 吸筹 =====
+
+        if large_net>0 and abs(price_change)<0.01:
+
+            if volatility<0.002:
+                strategy="🟢 横盘吸筹"
+
+            elif price_change<0:
+                strategy="🟢 打压吸筹"
+
+            else:
+                strategy="🟢 拉高吸筹"
+
+        # ===== 洗盘 =====
+
+        elif large_net<0 and abs(price_change)<0.02:
+
+            if volatility>0.01:
+                strategy="🧹 震荡洗盘"
+
+            elif price_change<-0.02:
+                strategy="🧹 急跌洗盘"
+
+            else:
+                strategy="🧹 阶梯洗盘"
+
+        # ===== 试盘 =====
+
+        elif large_net>0 and push_score<12:
+
+            if price_change>0:
+                strategy="🧪 拉高试盘"
+            else:
+                strategy="🧪 打压试盘"
+
+        # ===== 拉升 =====
+
+        elif large_net>0 and push_score>=15:
+
+            if price_change>0.04:
+                strategy="🚀 主升拉升"
+            else:
+                strategy="🚀 突破拉升"
+
+        # ===== 派发 =====
+
+        elif large_net<0 and price_change>0:
+
+            if volatility<0.005:
+                strategy="📦 横盘派发"
+            else:
+                strategy="📦 拉高派发"
+
+        # ===== 对倒 =====
+
+        elif large_ratio>0.5 and abs(large_net)<total_amt*0.02:
+
+            strategy="🔁 对倒控盘"
+
+        else:
+
+            strategy="⚖️ 多空博弈"
+
+        return strategy
+
+
 
     def run_full_analysis(self):
         self.analyze_period("开盘后15分钟", "09:20:00", "09:45:00")
@@ -407,6 +495,12 @@ class FinalQuantAnalyzer:
         self._log(f"- 小单净流：`{details['small_net']:,.0f}`")
         self._log(f"- 主力参与度：`{details['large_ratio']:.1%}`")
         self._log(f"- 日内涨跌：`{details['price_change']:.2%}`")
+
+        strategy = self.detect_main_force_strategy()
+
+        self._log("\n**🎯 主力策略识别**")
+        self._log(f"- 当前策略：`{strategy}`")
+
 
         conclusion = ""
         icon = ""
@@ -601,13 +695,15 @@ if __name__ == "__main__":
     TG_TOKEN = "8760053592:AAGt8DcQ9_5Gu1OhwWYWtYz1IkHYHFXxL20"
     TG_CHAT_ID = "-1003787641029"
     PROXY_URL = "http://127.0.0.1:7890" 
-    dfs=filter_stock.filer_stock()
+    # dfs=filter_stock.filer_stock()
+    dfs=pd.read_sql("select * from gp.stock_abnormal_monitor_analysis where need_to_analysis=1", con=engine)
+
+    # dfs = pd.read_excel("GP/prod_online/script/ones.xlsx")
     print(dfs.index.size,dfs.iloc[0,:])
     today = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
     # dfs['日期']=dfs['日期'].
-    dfs=dfs.loc[dfs['日期'].astype(str) == today.strftime('%Y-%m-%d')]
+    # dfs=dfs.loc[dfs['日期'].astype(str) == today.strftime('%Y-%m-%d')]
 
-    dfs.to_excel('1.xlsx')
     print(today.strftime('%Y-%m-%d'))
 
     if dfs.empty:
@@ -615,8 +711,8 @@ if __name__ == "__main__":
         exit()
     for k,v in dfs.iterrows():
 
-        stock_code = v['代码']
-        stock_name = v['名称']
+        stock_code = v['stock_code']
+        stock_name = v['stock_name']
 
         print(f"正在获取 {stock_name} ({stock_code}) 数据...")
         

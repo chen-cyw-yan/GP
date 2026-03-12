@@ -131,6 +131,17 @@ sql = f"""
     VALUES ({','.join(['%s' for _ in range(df_save.shape[1])])})
     """
 filter_stock.toSql(sql=sql, rows=rows_data)
+
+today_df=df_tmp.loc[df_tmp['trade_date'].astype(str)==today_str]
+print(today_df)
+today_rows_data = today_df.values.tolist()
+sql = f"""
+    REPLACE INTO gp.stock_abnormal_monitor_analysis(`{'`,`'.join(today_df.columns)}`)
+    VALUES ({','.join(['%s' for _ in range(today_df.shape[1])])})
+    """
+filter_stock.toSql(sql=sql, rows=today_rows_data)
+# exit(0)
+
 logger.info('存储策列完成....')
 
 
