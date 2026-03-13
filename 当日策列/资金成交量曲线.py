@@ -77,6 +77,7 @@ def plot_intraday_fund_flow(df):
 
 if __name__ == "__main__":
     # 构造更丰富的数据以测试“回撤修复”和“时间窗口”
-    df = ak.stock_zh_a_tick_tx_js(symbol='sh605289')
+    df = ak.stock_zh_a_tick_tx_js(symbol='sh603949')
+    
     # plot_trade_density(df=df)
     plot_intraday_fund_flow(df=df)

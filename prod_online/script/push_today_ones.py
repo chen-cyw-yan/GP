@@ -10,6 +10,7 @@ sys.path.append(
 import numpy as np
 from datetime import datetime, time, timedelta
 import logging
+import json
 import warnings
 import requests
 import akshare as ak
@@ -22,6 +23,8 @@ import locale
 import prod_online.services.filter_stock as filter_stock
 import prod_online.config.utils as utils
 import logging
+
+from prod_online.config.feishu_utils import FeishuUtils
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(message)s',
@@ -72,13 +75,15 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(me
 logger = logging.getLogger(__name__)
 
 class FinalQuantAnalyzer:
-    def __init__(self, df, stock_info):
+    def __init__(self, df, stock_info,save_images_path):
         self.df = df.copy()
         self.stock_info = stock_info
+        self.save_images_path=save_images_path
         self.logs = []
         
         code = stock_info.get('code', 'UNKNOWN')
         name = stock_info.get('name', '未知股票')
+        
         header = f"*🚀 A 股量化深度分析报告*\n"
         header += f"# {name} ({code})\n"
         header += f"`🕒 生成时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}`\n"
@@ -578,6 +583,8 @@ class FinalQuantAnalyzer:
             plt.grid(axis='x', linestyle='--', alpha=0.5)
             plt.tight_layout()
             
+            
+            plt.savefig(self.save_images_path.get('density_img_path'), format='png', dpi=150, bbox_inches='tight')
             img_buffer = BytesIO()
             plt.savefig(img_buffer, format='png', dpi=150, bbox_inches='tight')
             plt.close()
@@ -647,6 +654,8 @@ class FinalQuantAnalyzer:
             plt.grid(True, linestyle=':', alpha=0.6)
             plt.legend(loc='upper left')
             plt.tight_layout()
+            
+            plt.savefig(self.save_images_path.get('fundflow_img_path'), format='png', dpi=150, bbox_inches='tight')
             
             img_buffer = BytesIO()
             plt.savefig(img_buffer, format='png', dpi=150, bbox_inches='tight')
@@ -722,7 +731,13 @@ if __name__ == "__main__":
             print(f"数据获取失败：{e}")
             exit()
 
-        analyzer = FinalQuantAnalyzer(df, stock_info={'code': stock_code, 'name': stock_name})
+        density_img_path= "prod_online/imges/temp_image.png"
+        fundflow_img_path= "prod_online/imges/fundflow_img.png"
+        save_paths={
+            "density_img_path":density_img_path,
+            "fundflow_img_path":fundflow_img_path
+        }
+        analyzer = FinalQuantAnalyzer(df, stock_info={'code': stock_code, 'name': stock_name}, save_images_path=save_paths)
         report_text, density_img, fundflow_img = analyzer.run_full_analysis()
         
         print("\n--- 报告生成完成，正在发送至 Telegram ---")
@@ -733,4 +748,16 @@ if __name__ == "__main__":
         
         send_telegram_message_with_images(TG_TOKEN, TG_CHAT_ID, report_text, images_to_send, proxy_url=PROXY_URL)
         
-        print("✅ 报告及图表已成功推送至 Telegram!")
+        
+
+        
+        fs_client=FeishuUtils('cli_a9256b2aef7a5cd4','t22QBXS6MVqsXC41GoCDvbxin0tpXyL3')
+        context={
+                "text":report_text
+            }
+        fs_client.set_message_for_text('chat_id','oc_cd642a7fec1dcd847e91b2e1775809d2',json.dumps(context))
+        fs_client.set_message_for_image('chat_id', 'oc_cd642a7fec1dcd847e91b2e1775809d2',
+                                            density_img_path)
+        fs_client.set_message_for_image('chat_id', 'oc_cd642a7fec1dcd847e91b2e1775809d2',
+                                            fundflow_img_path)
+        # fs_client.set_message_for_file('chat_id', 'oc_cd642a7fec1dcd847e91b2e1775809d2',excel_path,'result.xlsx')
