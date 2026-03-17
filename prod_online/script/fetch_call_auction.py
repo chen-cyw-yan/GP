@@ -55,7 +55,7 @@ import requests
 def stock_zh_a_tick_tx_js(symbol: str = "sz000001",timeout=30,page_size=-1) -> pd.DataFrame:
     """
     腾讯财经-历史分笔数据
-https://gu.qq.com/sz300494/gp/detail
+    https://gu.qq.com/sz300494/gp/detail
     :param symbol: 股票代码
     :type symbol: str
     :return: 历史分笔数据

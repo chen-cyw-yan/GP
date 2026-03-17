@@ -9,8 +9,27 @@ from bs4 import BeautifulSoup
 import time
 import pandas as pd
 import logging
-
+import pymysql
 import random
+conn = pymysql.connect(
+            host='127.0.0.1',
+            user='root',
+            password='chen',
+            database='gp',
+            # use_unicode=args.encoding,
+        )
+cursor = conn.cursor()
+def toSql(sql: str, rows: list):
+    """
+        连接数据库
+    """
+    # print(sql,rows)
+    try:
+
+        cursor.executemany(sql, rows)
+        conn.commit()
+    except Exception as e:
+        raise ConnectionError("[ERROR] 连接数据库失败，具体原因是：" + str(e))
 # 配置日志
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -25,7 +44,9 @@ def init_driver(headless=True):
     chrome_options.add_argument("--disable-blink-features=AutomationControlled")
     chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
     chrome_options.add_experimental_option('useAutomationExtension', False)
-    driver_path='C:\App\chromedriver-win64\chromedriver-win64\chromedriver.exe'
+    # driver_path='C:\App\chromedriver-win64\chromedriver-win64\chromedriver.exe'
+    
+    driver_path='E:\Program Files\chromedriver-win64\chromedriver-win64\chromedriver.exe'
     service = Service(executable_path=driver_path)
     driver = webdriver.Chrome(service=service, options=chrome_options)
     
@@ -72,6 +93,7 @@ def scrape_thshy_page(driver, page_num):
                 continue
             row = {
                 '日期': cols[0].get_text(strip=True),
+                '概念板块代码': cols[1].find('a').get('href','').split('/')[-2],
                 '概念名称': cols[1].get_text(strip=True),
                 '概念连接': cols[1].find('a').get('href',''),
                 '驱动事件': cols[2].get_text(strip=True),
@@ -97,7 +119,7 @@ def main():
         time.sleep(3)
         
         # 获取总页数（可选）
-        total_pages = 5  # 同花顺行业共约5页，可动态获取
+        total_pages = 40  # 同花顺行业共约5页，可动态获取
         
         for page in range(1, total_pages + 1):
             data = scrape_thshy_page(driver, page)
@@ -117,7 +139,20 @@ def main():
     # 保存结果
     if all_data:
         df = pd.DataFrame(all_data)
-        df.to_csv("thshy_industries_gn.csv", index=False, encoding='utf-8-sig')
+        columns_name={
+            '日期':'trade_date',
+            '概念板块代码':'concept_code',
+            '概念名称':'concept_name',
+            '概念连接':'concept_url',
+            '驱动事件':'driver_event',
+            '驱动事件连接':'driver_event_url',
+            '龙头股':'leading_stock',
+            '成分股数量':'stock_count'
+        }
+        df=df.rename(columns=columns_name)
+        sql = f"REPLACE INTO gp.thshy_concept(`{'`,`'.join(df.columns)}`) VALUES ({','.join(['%s' for _ in range(df.shape[1])])})"
+        toSql(sql=sql, rows=df.values.tolist())
+        # df.to_csv("thshy_industries_gn.csv", index=False, encoding='utf-8-sig')
         logger.info(f"✅ 数据已保存至 thshy_industries.csv，共 {len(df)} 条记录")
     else:
         logger.error("❌ 未获取到任何数据")

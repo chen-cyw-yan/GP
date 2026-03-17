@@ -1,4 +1,5 @@
 from selenium import webdriver
+from datetime import datetime
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
@@ -6,16 +7,42 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 from bs4 import BeautifulSoup
+from sqlalchemy import create_engine
+import pymysql
 import time
 import pandas as pd
 import logging
+conn = pymysql.connect(
+            host='127.0.0.1',
+            user='root',
+            password='chen',
+            database='gp',
+            # use_unicode=args.encoding,
+        )
+cursor = conn.cursor()
+def toSql(sql: str, rows: list):
+    """
+        连接数据库
+    """
+    # print(sql,rows)
+    try:
 
+        cursor.executemany(sql, rows)
+        conn.commit()
+    except Exception as e:
+        raise ConnectionError("[ERROR] 连接数据库失败，具体原因是：" + str(e))
+# print(stock_zh_a_spot_em_df)
 # 配置日志
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 def init_driver(headless=True):
     """初始化 Chrome WebDriver"""
+    # driver_path='C:\App\chromedriver-win64\chromedriver-win64\chromedriver.exe'
+    driver_path='E:/Program Files/chromedriver-win64/chromedriver-win64/chromedriver.exe'
+    chrome_options = Options()
+    if headless:
+        chrome_options.add_argument("--headless")
     chrome_options = Options()
     if headless:
         chrome_options.add_argument("--headless")  # 无头模式
@@ -24,7 +51,7 @@ def init_driver(headless=True):
     chrome_options.add_argument("--disable-blink-features=AutomationControlled")
     chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
     chrome_options.add_experimental_option('useAutomationExtension', False)
-    driver_path='C:\App\chromedriver-win64\chromedriver-win64\chromedriver.exe'
+    driver_path='E:\Program Files\chromedriver-win64\chromedriver-win64\chromedriver.exe'
     service = Service(executable_path=driver_path)
     driver = webdriver.Chrome(service=service, options=chrome_options)
     
@@ -51,36 +78,38 @@ def scrape_thshy_page(driver, page_num):
     try:
         # 等待表格加载完成（关键：等待 tbody 出现）
         WebDriverWait(driver, 15).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "tbody tr"))
-        )
+                EC.presence_of_element_located((By.CSS_SELECTOR, "tbody tr"))
+            )
         time.sleep(2)  # 额外缓冲
-        
-        # 获取页面源码并解析
+            
+            # 获取页面源码并解析
         soup = BeautifulSoup(driver.page_source, 'html.parser')
-        # print(soup.text)
+            # print(soup.text)
         table = soup.select_one('.m-table.m-pager-table')
-        print(table)
+            # print(table)
         if not table:
             logger.warning(f"第 {page_num} 页未找到数据表")
             return []
-        
+            
         rows = []
         for tr in table.select('tr'):
             cols = tr.select('td')
             if len(cols) < 5:
                 continue
             row = {
-                '板块名称': cols[1].get_text(strip=True),
-                '板块链接': cols[1].find('a').get('href',''),
-                '涨跌幅': cols[2].get_text(strip=True),
-                '主力净流入': cols[3].get_text(strip=True),
-                '领涨股': cols[4].get_text(strip=True),
-                '上涨家数': cols[5].get_text(strip=True),
-                '下跌家数': cols[6].get_text(strip=True),
-                '均价':cols[7].get_text(strip=True),
-                '领涨股':cols[8].get_text(strip=True),
-                '领涨股最新价':cols[9].get_text(strip=True),
-                '领涨股涨跌幅':cols[10].get_text(strip=True),
+                    '板块名称': cols[1].get_text(strip=True),
+                    '板块链接': cols[1].find('a').get('href',''),
+                    '板块编号': cols[1].find('a').get('href','').split('/')[-2],
+                    '涨跌幅': cols[2].get_text(strip=True),
+                    '总成交量':cols[3].get_text(strip=True),
+                    '总成交额':cols[4].get_text(strip=True),
+                    '主力净流入': cols[5].get_text(strip=True),
+                    '上涨家数': cols[6].get_text(strip=True),
+                    '下跌家数': cols[7].get_text(strip=True),
+                    '均价':cols[8].get_text(strip=True),
+                    '领涨股':cols[9].get_text(strip=True),
+                    '领涨股最新价':cols[10].get_text(strip=True),
+                    '领涨股涨跌幅':cols[11].get_text(strip=True),
             }
             rows.append(row)
         return rows
@@ -119,7 +148,31 @@ def main():
     # 保存结果
     if all_data:
         df = pd.DataFrame(all_data)
-        df.to_csv("thshy_industries.csv", index=False, encoding='utf-8-sig')
+        # df.to_csv("thshy_industries.csv", index=False, encoding='utf-8-sig')
+        columns_name={
+            "板块名称":"plate_name",
+            "板块链接":"plate_url",
+            "板块编号":"plate_code",
+            "涨跌幅":"change_pct",
+            '总成交量':'volume_count',
+            '总成交额':'amount_sum',
+            "主力净流入":"main_net_inflow",
+            "领涨股":"leading_stock",
+            "上涨家数":"rising_count",
+            "下跌家数":"falling_count",
+            "均价":"avg_price",
+            "领涨股":"leading_stock_name",
+            "领涨股最新价":"leading_stock_price",
+            "领涨股涨跌幅":"leading_stock_change"
+        }
+        df=df.rename(columns=columns_name)
+        today_dt = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
+        today_str = today_dt.strftime("%Y-%m-%d")
+        # today_str ='2026-03-06'
+        logger.info(f"当前任务日期: {today_str}")
+        df['trade_date']=today_str
+        sql = f"REPLACE INTO gp.thshy_industry(`{'`,`'.join(df.columns)}`) VALUES ({','.join(['%s' for _ in range(df.shape[1])])})"
+        toSql(sql=sql, rows=df.values.tolist())
         logger.info(f"✅ 数据已保存至 thshy_industries.csv，共 {len(df)} 条记录")
     else:
         logger.error("❌ 未获取到任何数据")
