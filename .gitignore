@@ -7,6 +7,7 @@
 **/result.txt
 
 
+
 # 敏感数据
 数据集成
 
@@ -34,5 +35,5 @@ downloads
 *.bat
 *.spec
 *.xlsx
-
+*.xls
 脚本/标准转换/处理表-分步

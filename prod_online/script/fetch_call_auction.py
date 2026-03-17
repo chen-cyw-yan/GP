@@ -321,7 +321,9 @@ if __name__ == '__main__':
     logger.info(f"📅 当前任务日期: {today_str}")
 
     # 1. 交易日检查
-    if not utils.is_trading_day_ak(today_str):
+    is_run=True
+
+    if not utils.is_trading_day_ak(today_str) and is_run==False:
         logger.warning(f"⚠️ {today_str} 不是 A 股交易日，程序安全退出。")
         sys.exit(0)
 
