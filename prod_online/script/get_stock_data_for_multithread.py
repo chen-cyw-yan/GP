@@ -169,8 +169,10 @@ if __name__ == '__main__':
     today_str = today_dt.strftime("%Y-%m-%d")
     # today_str ='2026-03-06'
     logger.info(f"当前任务日期: {today_str}")
+    
+    is_run=True
 
-    if not utils.is_trading_day_ak(today_str):
+    if not utils.is_trading_day_ak(today_str) and is_run==False:
         logger.warning(f"⚠️ {today_str} 不是 A 股交易日，程序安全退出。")
         sys.exit(0)
     code = 'sh601398'
