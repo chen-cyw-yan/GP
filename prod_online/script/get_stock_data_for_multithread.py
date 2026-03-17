@@ -210,5 +210,6 @@ if __name__ == '__main__':
     get_stocks_year_multithread(need_get_stock_df, max_workers=8
                                 )
 
+
     cursor.close()
     conn.close()

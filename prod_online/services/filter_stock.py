@@ -360,7 +360,9 @@ def filer_stock():
     df['目标等级'] = next_lvl
     df['预警信息'] = next_reason
 
-
+    logger.info('剔除高位票')
+    df=df.loc[~(df['异动类型'].str.contains('10日涨跌幅')|df['异动类型'].str.contains('10日涨跌幅'))]
+    logger.info('剔除高位票完成')
 
     for code, g in tqdm.tqdm(df.groupby("code")):
         g = g.sort_values("date").reset_index(drop=True)
