@@ -88,7 +88,7 @@ def scrape_thshy_page(driver, page_num):
         return []
 
 def main():
-    driver = init_driver(headless=True)
+    driver = init_driver(headless=False)
     all_data = []
     
     try:
