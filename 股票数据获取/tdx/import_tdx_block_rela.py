@@ -107,7 +107,7 @@ def process_txt_files(data_dir):
 
                 # 最后一批
                 if batch:
-                    insert_batch(cursor, batch)
+                    insert_batch(cursor, batch) 
                     conn.commit()
                     file_count += len(batch)
                     total_inserted += len(batch)
