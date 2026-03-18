@@ -755,9 +755,9 @@ if __name__ == "__main__":
         context={
                 "text":report_text
             }
-        fs_client.set_message_for_text('chat_id','oc_cd642a7fec1dcd847e91b2e1775809d2',json.dumps(context))
-        fs_client.set_message_for_image('chat_id', 'oc_cd642a7fec1dcd847e91b2e1775809d2',
+        fs_client.set_message_for_text('chat_id','oc_dca02b55253dc48c8d9ce03e1b16e261',json.dumps(context))
+        fs_client.set_message_for_image('chat_id', 'oc_dca02b55253dc48c8d9ce03e1b16e261',
                                             density_img_path)
-        fs_client.set_message_for_image('chat_id', 'oc_cd642a7fec1dcd847e91b2e1775809d2',
+        fs_client.set_message_for_image('chat_id', 'oc_dca02b55253dc48c8d9ce03e1b16e261',
                                             fundflow_img_path)
         # fs_client.set_message_for_file('chat_id', 'oc_cd642a7fec1dcd847e91b2e1775809d2',excel_path,'result.xlsx')
