@@ -136,6 +136,41 @@ def get_best_block(x):
     
     return dq, hy, gn
 
+def get_best_block(x,trade_date=None):
+    stock_code = x['stock_code'][2:]
+    if trade_date:
+        trade_date = x['trade_date']
+    sql = f"""
+        select * from gp.tdx_block_daily as datail
+        join (
+            select block_code, block_name, block_type
+            from gp.tdx_block_stocks as rlx
+            where rlx.stock_code = '{stock_code}'
+        ) as rlx 
+        on datail.code = rlx.block_code
+        where datail.create_date = '{trade_date}'
+    """
+    block_detail_df = pd.read_sql(sql=sql, con=engine)
+    block_detail_df = block_detail_df.loc[
+        block_detail_df['block_type'].isin(['地区板块', '概念板块', '行业板块'])
+    ]
+
+    block_dq_df = block_detail_df.loc[block_detail_df['block_type']=='地区板块'].sort_values('strength', ascending=False).reset_index(drop=True)
+    block_hy_df = block_detail_df.loc[block_detail_df['block_type']=='行业板块'].sort_values('strength', ascending=False).reset_index(drop=True)
+    block_gn_df = block_detail_df.loc[block_detail_df['block_type']=='概念板块'].sort_values('strength', ascending=False).reset_index(drop=True)
+    # print(stock_code,trade_date,block_detail_df)
+    # 如果为空，返回空字符串
+    top_2_gn=block_gn_df.loc[0:2]
+    gn_list = [f"{row['name']}(强度:{row['strength']})" for _, row in top_2_gn.iterrows()]
+    
+    # 用 "|" 拼接
+    gn = "|".join(gn_list)
+    dq = f"{block_dq_df.loc[0,'name']}(强度:{block_dq_df.loc[0,'strength']})" if not block_dq_df.empty else ""
+    hy = f"{block_hy_df.loc[0,'name']}(强度:{block_hy_df.loc[0,'strength']})" if not block_hy_df.empty else ""
+    
+    return dq, hy, gn
+
+
 
 
 logger.info('更新数据')
@@ -168,7 +203,7 @@ df_tmp = df_save.replace('', np.nan)
 df_tmp = df_tmp.astype(object).where(pd.notnull(df_tmp), None)
 df_tmp['trade_date']=df_tmp['trade_date'].astype(str)
 df_tmp.head()
-df_tmp[['region_block','industry_block','concept_block']]=df_tmp.apply(get_best_block, axis=1, result_type='expand')
+df_tmp[['region_block','industry_block','concept_block']]=df_tmp.apply(get_best_block, axis=1, result_type='expand',args=(None))
 
 
 rows_data = df_tmp.values.tolist()
@@ -191,8 +226,24 @@ filter_stock.toSql(sql=sql, rows=today_rows_data)
 
 logger.info('存储策列完成....')
 
-
 exit(0)
+
+analy_sql="select * from gp.stock_analysis where need_to_analysis=1"
+
+analy_df=pd.read_sql(sql=analy_sql,con=engine)
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 image_path = "table.png"
