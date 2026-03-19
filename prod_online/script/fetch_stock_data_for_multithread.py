@@ -163,8 +163,7 @@ def get_stocks_year_multithread(stocks_df, max_workers=6):
 # ==============================
 # 主程序
 # ==============================
-if __name__ == '__main__':
-
+def main():
     today_dt = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
     today_str = today_dt.strftime("%Y-%m-%d")
     # today_str ='2026-03-06'
@@ -213,3 +212,6 @@ if __name__ == '__main__':
 
     cursor.close()
     conn.close()
+
+if __name__ == '__main__':
+    main()

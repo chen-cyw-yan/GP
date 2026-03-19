@@ -124,10 +124,16 @@ def get_best_block(x):
     block_gn_df = block_detail_df.loc[block_detail_df['block_type']=='概念板块'].sort_values('strength', ascending=False).reset_index(drop=True)
     # print(stock_code,trade_date,block_detail_df)
     # 如果为空，返回空字符串
+    top_2_gn=block_gn_df.loc[0:2]
+    gn_list = [f"{row['name']}(强度:{row['strength']})" for _, row in top_2_gn.iterrows()]
+    
+    # 用 "|" 拼接
+    gn = "|".join(gn_list)
+
+
     dq = f"{block_dq_df.loc[0,'name']}(强度:{block_dq_df.loc[0,'strength']})" if not block_dq_df.empty else ""
     hy = f"{block_hy_df.loc[0,'name']}(强度:{block_hy_df.loc[0,'strength']})" if not block_hy_df.empty else ""
-    gn = f"{block_gn_df.loc[0,'name']}(强度:{block_gn_df.loc[0,'strength']})" if not block_gn_df.empty else ""
-
+    
     return dq, hy, gn
 
 
@@ -167,23 +173,26 @@ df_tmp[['region_block','industry_block','concept_block']]=df_tmp.apply(get_best_
 
 rows_data = df_tmp.values.tolist()
 sql = f"""
-    REPLACE INTO gp.stock_abnormal_monitor(`{'`,`'.join(df_save.columns)}`)
-    VALUES ({','.join(['%s' for _ in range(df_save.shape[1])])})
+    REPLACE INTO gp.stock_abnormal_monitor(`{'`,`'.join(df_tmp.columns)}`)
+    VALUES ({','.join(['%s' for _ in range(df_tmp.shape[1])])})
     """
 filter_stock.toSql(sql=sql, rows=rows_data)
 
 
 today_df=df_tmp.loc[df_tmp['trade_date'].astype(str)==today_str]
-print(today_df)
+today_df=today_df[['stock_code','stock_name','trigger_count','region_block','industry_block','concept_block']]
 today_rows_data = today_df.values.tolist()
 sql = f"""
-    REPLACE INTO gp.stock_abnormal_monitor_analysis(`{'`,`'.join(today_df.columns)}`)
+    REPLACE INTO gp.stock_analysis(`{'`,`'.join(today_df.columns)}`)
     VALUES ({','.join(['%s' for _ in range(today_df.shape[1])])})
     """
 filter_stock.toSql(sql=sql, rows=today_rows_data)
-# exit(0)
+
 
 logger.info('存储策列完成....')
+
+
+exit(0)
 
 
 image_path = "table.png"
@@ -222,15 +231,15 @@ df = df.iloc[0:100]
 logger.info(f"{df_show.index.size}")
 
 
-dfi.export(df_show, image_path, max_rows=30)
+# dfi.export(df_show, image_path, max_rows=30)
 
     # 发送图片
-with open(image_path, "rb") as f:
-    bot.send_photo(
-            chat_id=CHAT_ID,
-            photo=f,
-            caption=message
-        )
+# with open(image_path, "rb") as f:
+#     bot.send_photo(
+#             chat_id=CHAT_ID,
+#             photo=f,
+#             caption=message
+#         )
 
     # ===== 同时发送完整Excel =====
 excel_path = "prod_online/imges/result.xlsx"
@@ -246,6 +255,4 @@ context={
         "text":message
     }
 fs_client.set_message_for_text('chat_id','oc_cd642a7fec1dcd847e91b2e1775809d2',json.dumps(context))
-fs_client.set_message_for_image('chat_id', 'oc_cd642a7fec1dcd847e91b2e1775809d2',
-                                      image_path)
 fs_client.set_message_for_file('chat_id', 'oc_cd642a7fec1dcd847e91b2e1775809d2',excel_path,'result.xlsx')
