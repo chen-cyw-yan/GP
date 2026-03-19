@@ -5,12 +5,14 @@
 # @email:1183445504@qq.com
 import sys
 import os
-
+import platform
 sys.path.append(
     os.path.abspath(
         os.path.join(os.path.dirname(__file__), "../../")
     )
 )
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 import dataframe_image as dfi
 from telegram import Bot
 from telegram.utils.request import Request
@@ -27,6 +29,15 @@ import logging
 import prod_online.services.update_stock_date as update_stock_date
 import prod_online.services.filter_stock as filter_stock
 import prod_online.config.utils as utils
+import json
+from prod_online.config.feishu_utils import FeishuUtils
+
+import matplotlib.pyplot as plt
+from matplotlib import rcParams
+
+# 指定中文字体
+rcParams['font.sans-serif'] = ['SimHei']  # 或 'Microsoft YaHei'
+rcParams['axes.unicode_minus'] = False    # 负号正常显示
 # ==============================
 # 日志配置
 # ==============================
@@ -166,16 +177,18 @@ else:
 df_show = df.iloc[0:30]
 logger.info(f"{df_show.index.size}")
 # chrome_path=r'C:\Program Files\Google\Chrome\Application\chrome.exe'
-dfi.export(df_show, image_path, max_rows=30)
+# dfi.export(df_show, image_path, max_rows=30,table_conversion='matplotlib')
+
+# dfi.export(res_df, image_path, max_rows=100,table_conversion='matplotlib')
 # dfi.export(df_show, image_path, max_rows=30, chrome_path=chrome_path)
 
     # 发送图片
-with open(image_path, "rb") as f:
-    bot.send_photo(
-            chat_id=CHAT_ID,
-            photo=f,
-            caption=message
-        )
+# with open(image_path, "rb") as f:
+#     bot.send_photo(
+#             chat_id=CHAT_ID,
+#             photo=f,
+#             caption=message
+#         )
 
     # ===== 同时发送完整Excel =====
 excel_path = "result.xlsx"
@@ -186,3 +199,10 @@ with open(excel_path, "rb") as f:
             chat_id=CHAT_ID,
             document=f
         )
+fs_client=FeishuUtils('cli_a9256b2aef7a5cd4','t22QBXS6MVqsXC41GoCDvbxin0tpXyL3')
+context={
+        "text":message
+    }
+fs_client.set_message_for_text('chat_id','oc_cd642a7fec1dcd847e91b2e1775809d2',json.dumps(context))
+# fs_client.set_message_for_image('chat_id', 'oc_cd642a7fec1dcd847e91b2e1775809d2',image_path)
+fs_client.set_message_for_file('chat_id', 'oc_cd642a7fec1dcd847e91b2e1775809d2',excel_path,'result.xlsx')

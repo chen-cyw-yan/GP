@@ -417,7 +417,8 @@ if __name__ == "__main__":
     res_df.sort_values(by="竞价评分", ascending=False, inplace=True)
     res_df=res_df.drop_duplicates()
     image_path='prod_online/imges/auction.png'
-    dfi.export(res_df, image_path, max_rows=100)
+    # dfi.export(res_df, image_path, max_rows=100)
+    dfi.export(res_df, image_path, max_rows=100,table_conversion='matplotlib')
     fs_client=FeishuUtils('cli_a9256b2aef7a5cd4','t22QBXS6MVqsXC41GoCDvbxin0tpXyL3')
     message=f"""竞价强度分析，生成日期：{today_str}"""
     context={
