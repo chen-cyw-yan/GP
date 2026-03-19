@@ -1,7 +1,8 @@
 import matplotlib
-matplotlib.use("Agg")
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
-plt.plot([1,2,3], [4,5,6])
-plt.savefig(r"E:\tmp\test_plot.png")
-print("保存成功")
+plt.plot([1,2,3],[4,5,6])
+plt.savefig("test.png")
+plt.close()
+print("done")
