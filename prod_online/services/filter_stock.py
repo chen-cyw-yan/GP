@@ -3,6 +3,8 @@ import time
 import akshare as ak
 import pandas as pd
 import numpy as np
+
+from datetime import datetime, timedelta
 import tqdm
 # import pyecharts.options as opts
 # from pyecharts.charts import Line
@@ -339,7 +341,20 @@ def precompute_next_level_gap(df, cond3, cond5, cond10, cond30):
 
 
 def filer_stock():
-    df = pd.read_sql('select * from gp.stock', con=conn)
+
+    # 1. 获取当前日期和时间
+    today = datetime.now()
+
+    # 2. 计算前 90 天的日期
+    days_ago_90 = today - timedelta(days=90)
+
+    # 3. 格式化输出 (例如：'2025-12-18')
+    date_str = days_ago_90.strftime('%Y-%m-%d')
+
+    print(f"当前日期: {today.strftime('%Y-%m-%d')}")
+    print(f"90天前: {date_str}")
+
+    df = pd.read_sql(f"select * from gp.stock where date>='{date_str}'", con=conn)
     base_df = df
     result = []
     # df['是否触发异动'], df['异动类型'] = precompute_regulatory_abnormal_vectorized(df)
@@ -348,6 +363,8 @@ def filer_stock():
     logger.info('计算触发异动')
 
     flag, reason, c3, c5, c10, c30 = precompute_regulatory_abnormal_vectorized(df)
+
+    logger.info('计算触发异动完成')
     df['是否触发异动'] = flag
     df['异动类型'] = reason
     logger.info('计算触发异动计算完成')
@@ -361,7 +378,8 @@ def filer_stock():
     df['预警信息'] = next_reason
 
     logger.info('剔除高位票')
-    df=df.loc[~(df['异动类型'].str.contains('10日涨跌幅')|df['异动类型'].str.contains('10日涨跌幅'))]
+    # df=df.loc[~(df['异动类型'].str.contains('10日涨跌幅')|df['异动类型'].str.contains('10日涨跌幅'))]
+    df=df.loc[~df['异动类型'].str.contains('10日涨跌幅')]
     logger.info('剔除高位票完成')
 
     for code, g in tqdm.tqdm(df.groupby("code")):

@@ -28,7 +28,7 @@ def read_tdx_file(file_path):
 
     raise ValueError(f"无法解析文件: {file_path}")
 # === 配置 ===
-DATA_DIR = r"C:\new_tdx\T0002\export" # 替换为你的 .xls 文件目录
+DATA_DIR = r"E:\new_tdx\T0002\export\block_data" # 替换为你的 .xls 文件目录
 
 DB_CONFIG = {
     'host': '127.0.0.1',

@@ -5,7 +5,8 @@
 # @email:1183445504@qq.com
 import sys
 import os
-
+import platform
+import matplotlib.pyplot as plt
 sys.path.append(
     os.path.abspath(
         os.path.join(os.path.dirname(__file__), "../../")
@@ -49,6 +50,33 @@ today_dt = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
 today_str = today_dt.strftime("%Y-%m-%d")
     # today_str ='2026-03-06'
 logger.info(f"当前任务日期: {today_str}")
+
+def setup_matplotlib_font():
+    """自动设置适合当前操作系统的中文字体"""
+    system_name = platform.system()
+    
+    # 常见中文字体映射
+    if system_name == 'Windows':
+        font_name = 'SimHei'  # 黑体
+    elif system_name == 'Darwin':  # macOS
+        font_name = 'Arial Unicode MS'  # 或 'Heiti TC'
+    else:  # Linux
+        # 尝试常见 Linux 中文字体，如果没有则 fallback
+        font_name = 'WenQuanYi Micro Hei' 
+    
+    # 设置字体
+    plt.rcParams['font.sans-serif'] = [font_name, 'DejaVu Sans']
+    # 解决负号显示为方块的问题
+    plt.rcParams['axes.unicode_minus'] = False
+    
+    # 验证字体是否加载成功（可选）
+    try:
+        plt.title("测试")
+        plt.close()
+    except:
+        logger.warning(f"无法加载字体 {font_name}，中文可能无法显示。尝试使用默认字体。")
+
+setup_matplotlib_font()
 
 if not utils.is_trading_day_ak(today_str):
     logger.warning(f"⚠️ {today_str} 不是 A 股交易日，程序安全退出。")
@@ -140,13 +168,10 @@ sql = f"""
     VALUES ({','.join(['%s' for _ in range(today_df.shape[1])])})
     """
 filter_stock.toSql(sql=sql, rows=today_rows_data)
-# exit(0)
 
 logger.info('存储策列完成....')
 
-
-image_path = "table.png"
-
+image_path = "prod_online/imges/table.png"
 
 # ===== 生成时间 =====
 now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -181,7 +206,16 @@ df = df.iloc[0:100]
 logger.info(f"{df_show.index.size}")
 
 
-dfi.export(df_show, image_path, max_rows=30)
+fig, ax = plt.subplots()
+ax.axis('off')
+
+table = ax.table(
+    cellText=df_show.values,
+    colLabels=df_show.columns,
+    loc='center'
+)
+
+plt.savefig(image_path, bbox_inches='tight')
 
     # 发送图片
 with open(image_path, "rb") as f:
@@ -205,6 +239,5 @@ context={
         "text":message
     }
 fs_client.set_message_for_text('chat_id','oc_cd642a7fec1dcd847e91b2e1775809d2',json.dumps(context))
-fs_client.set_message_for_image('chat_id', 'oc_cd642a7fec1dcd847e91b2e1775809d2',
-                                      image_path)
+fs_client.set_message_for_image('chat_id', 'oc_cd642a7fec1dcd847e91b2e1775809d2',image_path)
 fs_client.set_message_for_file('chat_id', 'oc_cd642a7fec1dcd847e91b2e1775809d2',excel_path,'result.xlsx')

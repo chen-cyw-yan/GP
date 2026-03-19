@@ -132,7 +132,7 @@ filter_stock.toSql(sql=sql, rows=rows_data)
 logger.info('存储策列完成....')
 
 
-image_path = "table.png"
+image_path = "prod_online/imges/table.png"
 
 
 # ===== 生成时间 =====
@@ -165,9 +165,9 @@ else:
     # ===== 只取前50行生成图片 =====
 df_show = df.iloc[0:30]
 logger.info(f"{df_show.index.size}")
+chrome_path=r'C:\Program Files\Google\Chrome\Application\chrome.exe'
 
-
-dfi.export(df_show, image_path, max_rows=30)
+dfi.export(df_show, image_path, max_rows=30, chrome_path=chrome_path)
 
     # 发送图片
 with open(image_path, "rb") as f:

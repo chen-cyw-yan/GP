@@ -2,7 +2,7 @@ import pymysql
 from pathlib import Path
 
 # === 配置区 ===
-DATA_DIR = r"C:\new_tdx\T0002\export"
+DATA_DIR = r"E:\new_tdx\T0002\export\block"
 
 DB_CONFIG = {
     'host': '127.0.0.1',
