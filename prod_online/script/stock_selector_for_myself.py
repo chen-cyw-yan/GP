@@ -169,113 +169,113 @@ def get_best_block(x):
     
     return dq, hy, gn
 
-logger.info('更新数据')
-# update_stock_date.update_date()
-logger.info('更新数据完成....')
-logger.info('运行策列....')
-df=filter_stock.filer_stock()
-logger.info('运行策列完成....')
-logger.info('存储策列数据....')
-df_save=df
-df_save=df_save.rename(columns={"代码":'stock_code',
-"名称":'stock_name' ,
-"日期":'trade_date' ,
-"收盘价":'close_price' ,
-"触发信号次数":'trigger_count',
-"是否异动类型":'is_abnormal_type' ,
-"下一日可能触发":'next_day_may_trigger' ,
-"所需最小涨幅":'min_required_change' ,
-"目标等级":'target_level',
-"预警信息":'warning_info'})
-df_tmp = df_save.replace('', np.nan)
-df_tmp = df_tmp.astype(object).where(pd.notnull(df_tmp), None)
-df_tmp['trade_date']=df_tmp['trade_date'].astype(str)
-df_tmp.head()
-df_tmp[['region_block','industry_block','concept_block']]=df_tmp.apply(get_best_block, axis=1, result_type='expand')
+def main():
+    logger.info('运行策列....')
+    df=filter_stock.filer_stock()
+    logger.info('运行策列完成....')
+    logger.info('存储策列数据....')
+    df_save=df
+    df_save=df_save.rename(columns={"代码":'stock_code',
+    "名称":'stock_name' ,
+    "日期":'trade_date' ,
+    "收盘价":'close_price' ,
+    "触发信号次数":'trigger_count',
+    "是否异动类型":'is_abnormal_type' ,
+    "下一日可能触发":'next_day_may_trigger' ,
+    "所需最小涨幅":'min_required_change' ,
+    "目标等级":'target_level',
+    "预警信息":'warning_info'})
+    df_tmp = df_save.replace('', np.nan)
+    df_tmp = df_tmp.astype(object).where(pd.notnull(df_tmp), None)
+    df_tmp['trade_date']=df_tmp['trade_date'].astype(str)
+    df_tmp.head()
+    df_tmp[['region_block','industry_block','concept_block']]=df_tmp.apply(get_best_block, axis=1, result_type='expand')
 
 
-rows_data = df_tmp.values.tolist()
-sql = f"""
-    REPLACE INTO gp.stock_abnormal_monitor(`{'`,`'.join(df_tmp.columns)}`)
-    VALUES ({','.join(['%s' for _ in range(df_tmp.shape[1])])})
+    rows_data = df_tmp.values.tolist()
+    sql = f"""
+        REPLACE INTO gp.stock_abnormal_monitor(`{'`,`'.join(df_tmp.columns)}`)
+        VALUES ({','.join(['%s' for _ in range(df_tmp.shape[1])])})
+        """
+    filter_stock.toSql(sql=sql, rows=rows_data)
+
+
+    today_df=df_tmp.loc[df_tmp['trade_date'].astype(str)==today_str]
+    today_df=today_df[['stock_code','stock_name','trigger_count','is_abnormal_type','warning_info','region_block','industry_block','concept_block']]
+    today_rows_data = today_df.values.tolist()
+    print('xxxxx',today_df)
+    sql = f"""
+        REPLACE INTO gp.stock_analysis(`{'`,`'.join(today_df.columns)}`)
+        VALUES ({','.join(['%s' for _ in range(today_df.shape[1])])})
+        """
+    filter_stock.toSql(sql=sql, rows=today_rows_data)
+
+
+    logger.info('存储策列完成....')
+
+    # exit(0)
+
+
+    image_path = "table.png"
+
+
+    # ===== 生成时间 =====
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    # ===== 统计结果 =====
+    if df is None or df.empty:
+        message = f"""
+    📊 策略扫描结果
+
+    🕒 生成时间：{now}
+    📌 策略名称：启动策略
+
+    ⚠ 最近10个交易日无触发信号
     """
-filter_stock.toSql(sql=sql, rows=rows_data)
+        bot.send_message(chat_id=CHAT_ID, text=message)
 
+    else:
+        count = len(df)
 
-today_df=df_tmp.loc[df_tmp['trade_date'].astype(str)==today_str]
-today_df=today_df[['stock_code','stock_name','trigger_count','is_abnormal_type','warning_info','region_block','industry_block','concept_block']]
-today_rows_data = today_df.values.tolist()
-print('xxxxx',today_df)
-sql = f"""
-    REPLACE INTO gp.stock_analysis(`{'`,`'.join(today_df.columns)}`)
-    VALUES ({','.join(['%s' for _ in range(today_df.shape[1])])})
+        message = f"""
+    📊 策略扫描结果
+
+    🕒 生成时间：{now}
+    📌 策略名称：启动策略
+    🎯 本次筛选结果：{count} 只
+
     """
-filter_stock.toSql(sql=sql, rows=today_rows_data)
+        # 先导出图片
+        # ===== 只取前50行生成图片 =====
+    df_show = df_save.iloc[0:30]
+    df = df.iloc[0:100]
+    logger.info(f"{df_show.index.size}")
 
 
-logger.info('存储策列完成....')
+    # dfi.export(df_show, image_path, max_rows=30)
 
-# exit(0)
+        # 发送图片
+    # with open(image_path, "rb") as f:
+    #     bot.send_photo(
+    #             chat_id=CHAT_ID,
+    #             photo=f,
+    #             caption=message
+    #         )
 
+        # ===== 同时发送完整Excel =====
+    excel_path = "prod_online/imges/result.xlsx"
+    df.to_excel(excel_path, index=False)
 
-image_path = "table.png"
-
-
-# ===== 生成时间 =====
-now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-# ===== 统计结果 =====
-if df is None or df.empty:
-    message = f"""
-📊 策略扫描结果
-
-🕒 生成时间：{now}
-📌 策略名称：启动策略
-
-⚠ 最近10个交易日无触发信号
-"""
-    bot.send_message(chat_id=CHAT_ID, text=message)
-
-else:
-    count = len(df)
-
-    message = f"""
-📊 策略扫描结果
-
-🕒 生成时间：{now}
-📌 策略名称：启动策略
-🎯 本次筛选结果：{count} 只
-
-"""
-    # 先导出图片
-    # ===== 只取前50行生成图片 =====
-df_show = df_save.iloc[0:30]
-df = df.iloc[0:100]
-logger.info(f"{df_show.index.size}")
-
-
-# dfi.export(df_show, image_path, max_rows=30)
-
-    # 发送图片
-# with open(image_path, "rb") as f:
-#     bot.send_photo(
-#             chat_id=CHAT_ID,
-#             photo=f,
-#             caption=message
-#         )
-
-    # ===== 同时发送完整Excel =====
-excel_path = "prod_online/imges/result.xlsx"
-df.to_excel(excel_path, index=False)
-
-with open(excel_path, "rb") as f:
-    bot.send_document(
-            chat_id=CHAT_ID,
-            document=f
-        )
-fs_client=FeishuUtils('cli_a9256b2aef7a5cd4','t22QBXS6MVqsXC41GoCDvbxin0tpXyL3')
-context={
-        "text":message
-    }
-fs_client.set_message_for_text('chat_id','oc_cd642a7fec1dcd847e91b2e1775809d2',json.dumps(context))
-fs_client.set_message_for_file('chat_id', 'oc_cd642a7fec1dcd847e91b2e1775809d2',excel_path,'result.xlsx')
+    with open(excel_path, "rb") as f:
+        bot.send_document(
+                chat_id=CHAT_ID,
+                document=f
+            )
+    fs_client=FeishuUtils('cli_a9256b2aef7a5cd4','t22QBXS6MVqsXC41GoCDvbxin0tpXyL3')
+    context={
+            "text":message
+        }
+    fs_client.set_message_for_text('chat_id','oc_cd642a7fec1dcd847e91b2e1775809d2',json.dumps(context))
+    fs_client.set_message_for_file('chat_id', 'oc_cd642a7fec1dcd847e91b2e1775809d2',excel_path,'result.xlsx')
+if __name__ == '__main__':
+    main()
