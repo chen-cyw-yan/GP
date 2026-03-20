@@ -242,7 +242,7 @@ def save_to_db_and_notify(df_final: pd.DataFrame, engine, conn):
     col_str = ','.join([f"`{c}`" for c in columns])
     placeholders = ','.join(['%s'] * len(columns))
     sql = f"REPLACE INTO gp.stock_analysis ({col_str}) VALUES ({placeholders})"
-    
+    print(sql)
     try:
         cursor = conn.cursor()
         # 转换数据为列表，处理 NaN
@@ -260,7 +260,7 @@ def save_to_db_and_notify(df_final: pd.DataFrame, engine, conn):
     try:
         # 准备导出列
         export_cols = [
-            'stock_code', 'stock_name', 'trigger_count',
+            'stock_code', 'stock_name', 'trigger_count','is_abnormal_type','warning_info',
             'industry_block', 'region_block', 'concept_block',
             'concept_block_resonance', 'create_time', 'update_time'
         ]
@@ -270,7 +270,8 @@ def save_to_db_and_notify(df_final: pd.DataFrame, engine, conn):
         
         # 重命名中文表头
         rename_map = {
-            'stock_code': '股票代码', 'stock_name': '股票名称', 'trigger_count': '触发次数',
+            'stock_code': '股票代码', 'stock_name': '股票名称', 'trigger_count': '触发次数'
+            ,'is_abnormal_type':'是否异动类型','warning_info':'下一日可能触发',
             'industry_block': '行业板块', 'region_block': '地区板块', 'concept_block': '概念板块',
             'concept_block_resonance': '概念共振得分', 'create_time': '创建时间', 'update_time': '更新时间'
         }
@@ -338,9 +339,13 @@ def main():
         cols = df_analy.columns.tolist()
         if 'stock_code_x' in cols and 'stock_code_y' in cols:
             # 删除右侧合并进来的纯净码列 (stock_code_y)
-            df_analy.drop(columns=['stock_code_y'], inplace=True)
+            df_analy.drop(columns=['stock_code_y','industry_block_x', 'concept_block_x', 'region_block_x'], inplace=True)
             # 将左侧的 stock_code_x 重命名回 stock_code
-            df_analy.rename(columns={'stock_code_x': 'stock_code'}, inplace=True)
+            df_analy.rename(columns={'stock_code_x': 'stock_code',
+                                     'industry_block_y':'industry_block', 
+                                     'concept_block_y':'concept_block', 
+                                     'region_block_y':'region_block'
+                                     }, inplace=True)
             logger.info("已修复 merge 导致的 stock_code 列名冲突。")
         elif 'stock_code' not in cols:
             # 极端情况：如果 stock_code 完全丢失，尝试从 code_clean 恢复（加回前缀逻辑需根据实际数据调整，这里假设必须有）
@@ -357,7 +362,7 @@ def main():
 
         # 5. 整理最终列
         final_columns = [
-            'stock_code', 'stock_name', 'need_to_analysis', 'trigger_count',
+            'stock_code', 'stock_name', 'need_to_analysis', 'trigger_count', 'is_abnormal_type', 'warning_info',
             'industry_block', 'concept_block', 'region_block',
             'create_time', 'update_time', 'resonance_score'
         ]

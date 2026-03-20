@@ -136,10 +136,9 @@ def get_best_block(x):
     
     return dq, hy, gn
 
-def get_best_block(x,trade_date=None):
+def get_best_block(x):
     stock_code = x['stock_code'][2:]
-    if trade_date:
-        trade_date = x['trade_date']
+    trade_date = x['trade_date']
     sql = f"""
         select * from gp.tdx_block_daily as datail
         join (
@@ -192,7 +191,7 @@ df_tmp = df_save.replace('', np.nan)
 df_tmp = df_tmp.astype(object).where(pd.notnull(df_tmp), None)
 df_tmp['trade_date']=df_tmp['trade_date'].astype(str)
 df_tmp.head()
-df_tmp[['region_block','industry_block','concept_block']]=df_tmp.apply(get_best_block, axis=1, result_type='expand',args=(None))
+df_tmp[['region_block','industry_block','concept_block']]=df_tmp.apply(get_best_block, axis=1, result_type='expand')
 
 
 rows_data = df_tmp.values.tolist()
@@ -204,8 +203,9 @@ filter_stock.toSql(sql=sql, rows=rows_data)
 
 
 today_df=df_tmp.loc[df_tmp['trade_date'].astype(str)==today_str]
-today_df=today_df[['stock_code','stock_name','trigger_count','region_block','industry_block','concept_block']]
+today_df=today_df[['stock_code','stock_name','trigger_count','is_abnormal_type','warning_info','region_block','industry_block','concept_block']]
 today_rows_data = today_df.values.tolist()
+print('xxxxx',today_df)
 sql = f"""
     REPLACE INTO gp.stock_analysis(`{'`,`'.join(today_df.columns)}`)
     VALUES ({','.join(['%s' for _ in range(today_df.shape[1])])})
@@ -215,11 +215,7 @@ filter_stock.toSql(sql=sql, rows=today_rows_data)
 
 logger.info('存储策列完成....')
 
-exit(0)
-
-analy_sql="select * from gp.stock_analysis where need_to_analysis=1"
-
-analy_df=pd.read_sql(sql=analy_sql,con=engine)
+# exit(0)
 
 
 image_path = "table.png"
@@ -253,7 +249,7 @@ else:
 """
     # 先导出图片
     # ===== 只取前50行生成图片 =====
-df_show = df.iloc[0:30]
+df_show = df_save.iloc[0:30]
 df = df.iloc[0:100]
 logger.info(f"{df_show.index.size}")
 
