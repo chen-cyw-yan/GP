@@ -1,6 +1,6 @@
 import logging
 import fetch_stock_data_for_multithread as fetch_stock
-import stock_selector_for_other as selector
+import stock_selector_for_myself as selector
 import stock_deep_report as deep_report
 import block_analysis
 # ==============================
