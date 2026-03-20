@@ -705,7 +705,7 @@ def main():
     TG_CHAT_ID = "-1003787641029"
     PROXY_URL = "http://127.0.0.1:7890" 
     # dfs=filter_stock.filer_stock()
-    dfs=pd.read_sql("select * from gp.stock_abnormal_monitor_analysis where need_to_analysis=1", con=engine)
+    dfs=pd.read_sql("select * from gp.stock_analysis where need_to_analysis=1", con=engine)
 
     # dfs = pd.read_excel("GP/prod_online/script/ones.xlsx")
     print(dfs.index.size,dfs.iloc[0,:])
