@@ -2,6 +2,7 @@ import logging
 import fetch_stock_data_for_multithread as fetch_stock
 import stock_selector_for_other as selector
 import stock_deep_report as deep_report
+import block_analysis
 # ==============================
 # 日志配置
 # ==============================
@@ -19,6 +20,10 @@ def main():
     logger.info("进行计算策略..")
     selector.main()
     logger.info("计算策略完成..")
+
+    logger.info("计算所属板块..")
+    block_analysis.main()
+    logger.info("计算所属板块完成..")
 
     logger.info("个股深度分析..")
     deep_report.main()

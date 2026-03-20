@@ -38,6 +38,8 @@ stock_block_map = {
 
 # 建立映射
 block_score_dict = dict(zip(df_block['name'], df_block['norm_score']))
+print("映射关系",block_score_dict)
+
 
 # =============================
 # 4️⃣ 计算市场环境因子（关键🔥）
@@ -111,3 +113,4 @@ df_result = df_result.sort_values('resonance_score', ascending=False)
 
 print("\n=== 股票共振强度排名 ===")
 print(df_result)
+

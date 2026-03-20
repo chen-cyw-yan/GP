@@ -1,28 +1,34 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# @Time : 2026/2/24 10:16
+# @Time : 2026/03/20
 # @Author : chenyanwen
-# @email:1183445504@qq.com
+# @Email : 1183445504@qq.com
+# @Description : 腾讯财经集合竞价数据抓取与入库 (重构版)
+
 import sys
 import os
-
-sys.path.append(
-    os.path.abspath(
-        os.path.join(os.path.dirname(__file__), "../../")
-    )
-)
 import time
-import sys
-import akshare as ak
+import logging
+import warnings
 import pandas as pd
 import numpy as np
+import requests
+import pymysql
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from sqlalchemy import create_engine
 from datetime import datetime
-from dateutil.relativedelta import relativedelta
-import pymysql
-import logging
-import prod_online.config.utils as utils
+from typing import List, Dict, Optional, Tuple
+
+# 添加项目路径
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
+
+# 引入工具类
+try:
+    import prod_online.config.utils as utils
+except ImportError:
+    utils = None
+    logging.warning("未找到 utils 模块，交易日检查将跳过或默认通过。")
+
 # ==============================
 # 日志配置
 # ==============================
@@ -34,285 +40,279 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ==============================
-# 数据库连接
+# 全局配置
 # ==============================
-
-#!/usr/bin/env python
-# -*- coding:utf-8 -*-
-"""
-Date: 2023/10/27 22:08
-Desc: 腾讯-股票-实时行情-成交明细
-成交明细-每个交易日 16:00 提供当日数据
-港股报价延时 15 分钟
-"""
-
-import warnings
-
-import pandas as pd
-import requests
-
-
-def stock_zh_a_tick_tx_js(symbol: str = "sz000001",timeout=30,page_size=-1) -> pd.DataFrame:
-    """
-    腾讯财经-历史分笔数据
-    https://gu.qq.com/sz300494/gp/detail
-    :param symbol: 股票代码
-    :type symbol: str
-    :return: 历史分笔数据
-    :rtype: pandas.DataFrame
-    """
-    big_df = pd.DataFrame()
-    page = 0
-    warnings.warn("正在下载数据，请稍等")
-    if page_size == -1:
-        while True:
-            try:
-                url = "http://stock.gtimg.cn/data/index.php"
-                params = {
-                    "appn": "detail",
-                    "action": "data",
-                    "c": symbol,
-                    "p": page,
-                }
-                r = requests.get(url, params=params,timeout=timeout)
-                text_data = r.text
-                temp_df = (
-                    pd.DataFrame(eval(text_data[text_data.find("[") :])[1].split("|"))
-                    .iloc[:, 0]
-                    .str.split("/", expand=True)
-                )
-                page += 1
-                big_df = pd.concat([big_df, temp_df], ignore_index=True)
-            except:  # noqa: E722
-                break
-    else:
-        while page < page_size:
-            try:
-                url = "http://stock.gtimg.cn/data/index.php"
-                params = {
-                    "appn": "detail",
-                    "action": "data",
-                    "c": symbol,
-                    "p": page,
-                }
-                r = requests.get(url, params=params,timeout=timeout)
-                text_data = r.text
-                temp_df = (
-                    pd.DataFrame(eval(text_data[text_data.find("[") :])[1].split("|"))
-                    .iloc[:, 0]
-                    .str.split("/", expand=True)
-                )
-                page += 1
-                big_df = pd.concat([big_df, temp_df], ignore_index=True)
-            except:  # noqa: E722
-                break
-    if not big_df.empty:
-        big_df = big_df.iloc[:, 1:].copy()
-        big_df.columns = [
-            "成交时间",
-            "成交价格",
-            "价格变动",
-            "成交量",
-            "成交金额",
-            "性质",
-        ]
-        big_df.reset_index(drop=True, inplace=True)
-        property_map = {
-            "S": "卖盘",
-            "B": "买盘",
-            "M": "中性盘",
-        }
-        big_df["性质"] = big_df["性质"].map(property_map)
-        big_df = big_df.astype(
-            {
-                "成交时间": str,
-                "成交价格": float,
-                "价格变动": float,
-                "成交量": int,
-                "成交金额": int,
-                "性质": str,
-            }
-        )
-    return big_df
-
-
-
-
-READ_ENGINE = create_engine("mysql+pymysql://root:chen@127.0.0.1:3306/gp?charset=utf8mb4")
-
 DB_CONFIG = {
     'host': '127.0.0.1',
     'user': 'root',
     'password': 'chen',
     'database': 'gp',
-    'charset': 'utf8mb4'
+    'charset': 'utf8mb4',
+    'autocommit': False
 }
 
-# ==============================
-# 单条数据入库函数 (线程安全：每次调用新建连接)
-# ==============================
-def insert_single_record(data_dict):
-    """
-    为单个数据记录建立独立数据库连接并插入。
-    确保多线程环境下不会冲突。
-    """
-    conn = None
-    cursor = None
-    try:
-        conn = pymysql.connect(**DB_CONFIG, autocommit=False)
-        cursor = conn.cursor()
-        
-        sql = """
-        REPLACE INTO gp.stock_call_auction 
-        (trade_date, stock_code, stock_name, auction_time, volume, amount, nature)
-        VALUES (%s, %s, %s, %s, %s, %s, %s)
-        """
-        row = (
-            data_dict['trade_date'],
-            data_dict['stock_code'],
-            data_dict['stock_name'],
-            data_dict['auction_time'],
-            data_dict['volume'],
-            data_dict['amount'],
-            data_dict['nature']
-        )
-        
-        cursor.execute(sql, row)
-        conn.commit()
-        logger.info(f"✅ [DB] 成功入库: {data_dict['stock_code']}")
-        return True
-        
-    except Exception as e:
-        if conn:
-            conn.rollback()
-        logger.error(f"❌ [DB] 入库失败 {data_dict.get('stock_code')}: {e}")
-        return False
-    finally:
-        if cursor: cursor.close()
-        if conn: conn.close()
+READ_ENGINE_URL = "mysql+pymysql://root:chen@127.0.0.1:3306/gp?charset=utf8mb4"
+
+# 腾讯接口配置
+TX_TIMEOUT = 30  # 单次请求超时秒数
+MAX_WORKERS = 6  # 并发线程数 (建议 4-8，过大易被封 IP)
+REST_TIME_ON_TIMEOUT = 60  # 触发超时后的休息时间
 
 # ==============================
-# 单只股票数据获取 (含超时控制)
+# 1. 数据抓取模块 (纯网络 IO)
 # ==============================
-def fetch_and_save_stock(row, timeout_seconds=60):
+def stock_zh_a_tick_tx_js(symbol: str, page_size: int = 1) -> Optional[pd.DataFrame]:
+    """
+    腾讯财经 - 历史分笔数据 (仅获取第一页，通常包含集合竞价)
+    """
+    big_df = pd.DataFrame()
+    page = 0
+    
+    try:
+        while page < page_size:
+            url = "http://stock.gtimg.cn/data/index.php"
+            params = {
+                "appn": "detail",
+                "action": "data",
+                "c": symbol,
+                "p": page,
+            }
+            r = requests.get(url, params=params, timeout=TX_TIMEOUT)
+            if r.status_code != 200:
+                break
+                
+            text_data = r.text
+            # 解析腾讯特有的格式
+            if "[" not in text_data:
+                break
+                
+            start_idx = text_data.find("[")
+            data_list = eval(text_data[start_idx:])
+            
+            if len(data_list) < 2:
+                break
+                
+            # 分割数据
+            temp_df = (
+                pd.DataFrame(data_list[1].split("|"))
+                .iloc[:, 0]
+                .str.split("/", expand=True)
+            )
+            
+            if temp_df.empty:
+                break
+                
+            big_df = pd.concat([big_df, temp_df], ignore_index=True)
+            page += 1
+            
+    except Exception as e:
+        logger.debug(f"抓取 {symbol} 网络异常: {e}")
+        return None
+
+    if big_df.empty:
+        return None
+
+    # 整理列名
+    big_df = big_df.iloc[:, 1:].copy()
+    if len(big_df.columns) >= 6:
+        big_df.columns = ["成交时间", "成交价格", "价格变动", "成交量", "成交金额", "性质"]
+        
+        # 映射性质
+        property_map = {"S": "卖盘", "B": "买盘", "M": "中性盘"}
+        big_df["性质"] = big_df["性质"].map(property_map).fillna("未知")
+        
+        # 类型转换
+        try:
+            big_df["成交价格"] = big_df["成交价格"].astype(float)
+            big_df["成交量"] = pd.to_numeric(big_df["成交量"], errors='coerce').fillna(0).astype(int)
+            big_df["成交金额"] = pd.to_numeric(big_df["成交金额"], errors='coerce').fillna(0).astype(int)
+            big_df["成交时间"] = big_df["成交时间"].astype(str)
+        except Exception as e:
+            logger.warning(f"{symbol} 数据类型转换失败: {e}")
+            
+        return big_df
+    else:
+        return None
+
+def fetch_single_stock_task(row: pd.Series) -> Dict:
+    """
+    单个股票的抓取任务 (在线程中运行)
+    返回：字典 (包含状态和数据)，如果失败则 status 为 ERROR
+    """
     symbol = row['code']
     name = row['name']
     trade_date = row['trade_date']
     
-    start_time = time.time()
+    result = {
+        'status': 'ERROR',
+        'data': None,
+        'symbol': symbol,
+        'msg': ''
+    }
     
     try:
-        # --- 1. 获取数据 ---
-        logger.info(f"🚀 开始获取: {symbol} ({name})")
-        
-        # 获取分笔数据
-        df = stock_zh_a_tick_tx_js(symbol=symbol,timeout=120,page_size=1)
+        # 1. 抓取数据
+        df = stock_zh_a_tick_tx_js(symbol=symbol, page_size=1)
         
         if df is None or df.empty:
-            logger.warning(f"⚠️ {symbol} 数据为空，跳过")
-            return "EMPTY"
-
-        # 检查列名
+            result['status'] = 'EMPTY'
+            result['msg'] = '数据为空'
+            return result
+            
         if '成交时间' not in df.columns:
-            logger.warning(f"⚠️ {symbol} 列名异常: {df.columns.tolist()}，跳过")
-            return "ERROR_COL"
-
-        # 筛选逻辑 (取第一行作为集合竞价结果，通常 9:25 是第一笔或包含汇总)
-        # 注意：akshare 该接口返回的通常是当天的所有分笔，第一行往往是 9:25 的集合竞价撮合结果
+            result['status'] = 'COL_ERR'
+            result['msg'] = '列名缺失'
+            return result
+            
+        # 2. 提取集合竞价数据 (取第一行)
         tick_row = df.iloc[0]
         
-        # 简单校验时间是否接近 09:25 (可选，防止接口返回顺序变化)
-        # time_str = str(tick_row.get('成交时间', ''))
-        # if not time_str.startswith('09:25'):
-        #     logger.warning(f"{symbol} 首条时间非 09:25 ({time_str})，尝试继续处理...")
-
-        # 数据清洗
-        def clean_number(val):
-            if val is None or val == '': return 0
-            if isinstance(val, (int, float)): return int(val)
-            try: return int(float(str(val).replace(',', '')))
-            except: return 0
-
-        volume = clean_number(tick_row.get('成交量', 0))
-        amount = clean_number(tick_row.get('成交金额', 0))
+        volume = int(tick_row.get('成交量', 0))
+        amount = int(tick_row.get('成交金额', 0))
         nature = str(tick_row.get('性质', '')).strip()
-
-        result = {
+        auction_time = str(tick_row.get('成交时间', '09:25:00'))
+        
+        # 简单的时间格式修正 (如果只有 HH:MM，补全秒)
+        if len(auction_time) == 5:
+            auction_time += ":00"
+            
+        result['data'] = {
             'trade_date': trade_date,
             'stock_code': symbol,
             'stock_name': name,
-            'auction_time': '09:25:00',
+            'auction_time': auction_time,
             'volume': volume,
             'amount': amount,
             'nature': nature
         }
-
-
-
-        # --- 3. 立即入库 ---
-        success = insert_single_record(result)
+        result['status'] = 'SUCCESS'
         
-        if success:
-            logger.info(f"✨ 完成: {symbol} | 量:{volume} 额:{amount} ")
-            return "SUCCESS"
-        else:
-            return "DB_FAIL"
-
     except Exception as e:
-        logger.error(f"💥 异常: {symbol} 发生错误: {e}")
-        return "ERROR"
+        result['msg'] = str(e)
+        logger.debug(f"抓取 {symbol} 处理异常: {e}")
+        
+    return result
 
 # ==============================
-# 多线程主控 (含熔断休息机制)
+# 2. 数据库操作模块 (批量处理)
 # ==============================
-def run_multithread_task(stocks_df, max_workers=8, timeout_limit=60, rest_time=60):
-    logger.info(f"📊 任务开始：共 {len(stocks_df)} 只股票，线程数: {max_workers}")
+def batch_insert_to_db(records: List[Dict], conn: pymysql.Connection):
+    """
+    批量插入数据到数据库
+    """
+    if not records:
+        return 0, 0
+        
+    cursor = conn.cursor()
+    sql = """
+    REPLACE INTO gp.stock_call_auction 
+    (trade_date, stock_code, stock_name, auction_time, volume, amount, nature)
+    VALUES (%s, %s, %s, %s, %s, %s, %s)
+    """
     
     success_count = 0
     fail_count = 0
-    timeout_triggered = False
+    
+    # 准备数据元组列表
+    values_list = []
+    for rec in records:
+        try:
+            row = (
+                rec['trade_date'],
+                rec['stock_code'],
+                rec['stock_name'],
+                rec['auction_time'],
+                rec['volume'],
+                rec['amount'],
+                rec['nature']
+            )
+            values_list.append(row)
+        except KeyError as e:
+            logger.error(f"数据字段缺失: {e}, 数据: {rec}")
+            fail_count += 1
 
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+    if not values_list:
+        return 0, fail_count
+
+    try:
+        # 批量执行
+        cursor.executemany(sql, values_list)
+        conn.commit()
+        success_count = len(values_list)
+        logger.info(f"✅ [DB] 批量入库成功: {success_count} 条记录")
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"❌ [DB] 批量入库失败: {e}")
+        fail_count = len(values_list)
+    finally:
+        cursor.close()
+        
+    return success_count, fail_count
+
+# ==============================
+# 3. 主控流程 (多线程调度)
+# ==============================
+def run_multithread_task(stocks_df: pd.DataFrame):
+    logger.info(f"📊 任务启动：共 {len(stocks_df)} 只股票，并发线程: {MAX_WORKERS}")
+    
+    all_results = []
+    timeout_triggered = False
+    
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        # 提交任务
         futures = {
-            executor.submit(fetch_and_save_stock, row): row['code'] 
+            executor.submit(fetch_single_stock_task, row): row['code'] 
             for _, row in stocks_df.iterrows()
         }
-
+        
+        # 收集结果
         for future in as_completed(futures):
             code = futures[future]
             try:
-                status = future.result()
+                res = future.result()
+                all_results.append(res)
                 
-                if status == "SUCCESS":
-                    success_count += 1
-                elif status == "TIMEOUT":
-                    fail_count += 1
-                    timeout_triggered = True
-                    logger.warning(f"🛑 触发超时熔断！当前股票 {code} 超时。")
-                    # 注意：这里不能直接 break，因为其他线程可能还在跑。
-                    # 但我们可以标记状态，后续逻辑处理。
-                    # 如果要立即停止所有任务，需要调用 executor.shutdown(wait=False) 并取消其他 future
-                    # 这里选择让当前超时的线程结束，其他正常线程继续，但主程序会在最后休息
-                elif status == "EMPTY":
-                    pass # 空数据不算失败，也不算成功
+                if res['status'] == 'SUCCESS':
+                    logger.info(f"✨ [{code}] 成功 | 量:{res['data']['volume']} 额:{res['data']['amount']}")
+                elif res['status'] == 'EMPTY':
+                    logger.debug(f"⚠️ [{code}] 无数据")
                 else:
-                    fail_count += 1
-                    logger.warning(f"⚠️ 股票 {code} 处理结果为: {status}")
+                    logger.warning(f"⚠️ [{code}] 失败: {res['msg']}")
                     
             except Exception as e:
-                fail_count += 1
-                logger.error(f"线程执行异常 {code}: {e}")
+                logger.error(f"💥 [{code}] 线程崩溃: {e}")
+                all_results.append({'status': 'ERROR', 'symbol': code, 'msg': str(e)})
 
-    # --- 超时后的全局休息逻辑 ---
-    if timeout_triggered:
-        logger.warning(f"😴 检测到本次批次中有股票获取超时，程序将暂停休息 {rest_time} 秒...")
-        time.sleep(rest_time)
-        logger.info("💤 休息结束，程序将继续或退出。")
+    # 检查是否有超时或特定错误触发休息 (这里简化逻辑：如果有大量失败或特定错误则休息)
+    # 原逻辑是检测 TIMEOUT，现在我们在 fetch 中没做显式 timeout 抛出，而是依赖 requests timeout
+    # 如果需要严格的熔断休息，可以统计失败率
+    error_count = sum(1 for r in all_results if r['status'] not in ['SUCCESS', 'EMPTY'])
+    if error_count > len(stocks_df) * 0.3: # 超过 30% 失败
+        logger.warning(f"😴 失败率过高 ({error_count}/{len(stocks_df)})，触发保护性休息 {REST_TIME_ON_TIMEOUT} 秒...")
+        time.sleep(REST_TIME_ON_TIMEOUT)
+        timeout_triggered = True
+
+    # --- 批量入库 ---
+    success_records = [r['data'] for r in all_results if r['status'] == 'SUCCESS' and r['data']]
     
-    logger.info(f"🏁 批次结束。成功: {success_count}, 失败/超时: {fail_count}")
+    if success_records:
+        logger.info(f"📝 开始批量入库 {len(success_records)} 条有效数据...")
+        conn = None
+        try:
+            conn = pymysql.connect(**DB_CONFIG)
+            s_cnt, f_cnt = batch_insert_to_db(success_records, conn)
+            logger.info(f"🏁 入库完成。成功: {s_cnt}, 失败: {f_cnt}")
+        except Exception as e:
+            logger.error(f"数据库连接失败: {e}")
+        finally:
+            if conn: conn.close()
+    else:
+        logger.warning("没有成功抓取到任何数据，跳过入库。")
+
+    return timeout_triggered
 
 # ==============================
-# 主程序
+# 主程序入口
 # ==============================
 if __name__ == '__main__':
     today_dt = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -321,15 +321,18 @@ if __name__ == '__main__':
     logger.info(f"📅 当前任务日期: {today_str}")
 
     # 1. 交易日检查
-    is_run=True
-
-    if not utils.is_trading_day_ak(today_str) and is_run==False:
-        logger.warning(f"⚠️ {today_str} 不是 A 股交易日，程序安全退出。")
-        sys.exit(0)
+    is_trading_day = True
+    if utils and hasattr(utils, 'is_trading_day_ak'):
+        if not utils.is_trading_day_ak(today_str):
+            logger.warning(f"⚠️ {today_str} 不是 A 股交易日，程序安全退出。")
+            sys.exit(0)
+    else:
+        logger.info("跳过交易日检查 (utils 不可用或未配置)")
 
     # 2. 查询待更新股票
-    # 注意：SQL 中的日期需要加引号
-    sqls = f"""
+    READ_ENGINE = create_engine(READ_ENGINE_URL)
+    
+    sql = f"""
     SELECT * FROM (
         SELECT code, MAX(name) as name FROM gp.stock s GROUP BY code
     ) AS stock 
@@ -337,10 +340,9 @@ if __name__ == '__main__':
         SELECT stock_code FROM gp.stock_call_auction WHERE trade_date = '{today_str}'
     )
     """
-    # logger.debug(f"SQL: {sqls}")
     
     try:
-        need_get_stock = pd.read_sql(sql=sqls, con=READ_ENGINE)
+        need_get_stock = pd.read_sql(sql=sql, con=READ_ENGINE)
     except Exception as e:
         logger.error(f"❌ 查询待更新股票列表失败: {e}")
         sys.exit(1)
@@ -352,8 +354,11 @@ if __name__ == '__main__':
     need_get_stock['trade_date'] = today_str
     logger.info(f"🎯 需要补充股票数量: {len(need_get_stock)}")
     
-    # 3. 执行获取 (每只股票独立入库，超时自动休息)
-    # max_workers 建议不要太大，避免触发 IP 封禁，4-6 个比较安全
-    run_multithread_task(need_get_stock, max_workers=4, timeout_limit=60, rest_time=60)
-
-    logger.info("🎉 程序正常结束")
+    # 3. 执行任务
+    try:
+        run_multithread_task(need_get_stock)
+        logger.info("🎉 程序正常结束")
+    except KeyboardInterrupt:
+        logger.warning("用户中断程序")
+    except Exception as e:
+        logger.error(f"程序运行严重错误: {e}", exc_info=True)

@@ -164,28 +164,17 @@ def get_best_block(x,trade_date=None):
     gn_list = [f"{row['name']}(强度:{row['strength']})" for _, row in top_2_gn.iterrows()]
     
     # 用 "|" 拼接
-    gn = "|".join(gn_list)
+    gn = "，".join(gn_list)
     dq = f"{block_dq_df.loc[0,'name']}(强度:{block_dq_df.loc[0,'strength']})" if not block_dq_df.empty else ""
     hy = f"{block_hy_df.loc[0,'name']}(强度:{block_hy_df.loc[0,'strength']})" if not block_hy_df.empty else ""
     
     return dq, hy, gn
-
-
-
 
 logger.info('更新数据')
 # update_stock_date.update_date()
 logger.info('更新数据完成....')
 logger.info('运行策列....')
 df=filter_stock.filer_stock()
-    # ==============================
-    # 主程序
-    # ==============================
-
-
-
-
-
 logger.info('运行策列完成....')
 logger.info('存储策列数据....')
 df_save=df
@@ -231,19 +220,6 @@ exit(0)
 analy_sql="select * from gp.stock_analysis where need_to_analysis=1"
 
 analy_df=pd.read_sql(sql=analy_sql,con=engine)
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 image_path = "table.png"

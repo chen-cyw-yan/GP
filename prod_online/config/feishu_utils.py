@@ -16,7 +16,7 @@ class FeishuUtils:  # 【建议】类名首字母大写，符合 Python 规范
         self.client = lark.Client.builder() \
             .app_id(app_id) \
             .app_secret(app_secret) \
-            .log_level(lark.LogLevel.DEBUG) \
+            .log_level(lark.LogLevel.ERROR) \
             .build()
 
     def set_message_for_text(self, receive_id_type, receive_id, text_content):
