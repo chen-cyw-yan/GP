@@ -271,11 +271,15 @@ def main():
                 chat_id=CHAT_ID,
                 document=f
             )
+        
+    logging.info(f'发送telegram完成')
+
     fs_client=FeishuUtils('cli_a9256b2aef7a5cd4','t22QBXS6MVqsXC41GoCDvbxin0tpXyL3')
     context={
             "text":message
         }
     fs_client.set_message_for_text('chat_id','oc_cd642a7fec1dcd847e91b2e1775809d2',json.dumps(context))
     fs_client.set_message_for_file('chat_id', 'oc_cd642a7fec1dcd847e91b2e1775809d2',excel_path,'result.xlsx')
+    logging.info(f'发送飞书完成')
 if __name__ == '__main__':
     main()
