@@ -1,5 +1,15 @@
 import akshare as ak
 from datetime import datetime
+
+
+
+import logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
 def is_trading_day_ak(date_str):
     try:
         df = ak.tool_trade_date_hist_sina()

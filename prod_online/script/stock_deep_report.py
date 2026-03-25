@@ -7,6 +7,8 @@ sys.path.append(
         os.path.join(os.path.dirname(__file__), "../../")
     )
 )
+# import matplotlib
+
 import numpy as np
 from datetime import datetime, time, timedelta
 import logging
@@ -15,6 +17,7 @@ import warnings
 import requests
 import akshare as ak
 import urllib3
+import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from io import BytesIO
@@ -25,6 +28,7 @@ import prod_online.config.utils as utils
 import logging
 
 from prod_online.config.feishu_utils import FeishuUtils
+matplotlib.use('Agg')  # 不使用GUI
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(message)s',
@@ -69,10 +73,6 @@ def setup_matplotlib_font():
         logger.warning(f"无法加载字体 {font_name}，中文可能无法显示。尝试使用默认字体。")
 
 setup_matplotlib_font()
-
-# 配置日志
-logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
-logger = logging.getLogger(__name__)
 
 class FinalQuantAnalyzer:
     def __init__(self, df, stock_info,save_images_path):
