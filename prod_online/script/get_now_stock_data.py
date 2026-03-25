@@ -77,7 +77,8 @@ def get_today_data():
     df = df.loc[~df["名称"].str.contains("ST")]
     return df
 
-if __name__ == '__main__':
+
+def main():
     today_dt = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
     today_str = today_dt.strftime("%Y-%m-%d")
     # today_str ='2026-03-06'
@@ -95,3 +96,6 @@ if __name__ == '__main__':
     print(today_data_df)
     sql = f"REPLACE INTO gp.stock(`{'`,`'.join(today_data_df.columns)}`) VALUES ({','.join(['%s' for _ in range(today_data_df.shape[1])])})"
     toSql(sql=sql, rows=today_data_df.values.tolist())
+
+if __name__ == '__main__':
+    main()

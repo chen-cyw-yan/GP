@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <script src="https://cdn.jsdelivr.net/npm/echarts/dist/echarts.min.js"></script>
+</head>
+<body>
+
+<div id="chart" style="width:100%;height:600px;"></div>
+
+<script>
+var chart = echarts.init(document.getElementById('chart'));
+
+function updateChart() {
+    fetch('http://127.0.0.1:5000/data')
+    .then(res => res.json())
+    .then(data => {
+
+        let xAxisData = [];
+        let series = [];
+
+        data.forEach(item => {
+            let yData = item.data.map(d => d[1]);  // y 值
+            let xData = item.data.map(d => d[0]);  // x 值
+            xAxisData = xData;  // 假设每个股票的分钟一致
+
+            series.push({
+                name: item.name,
+                type: 'line',
+                smooth: true,
+                data: yData
+            });
+        });
+
+        chart.setOption({
+            tooltip: { trigger: 'axis' },
+            legend: { data: data.map(d => d.name) },
+            xAxis: { type: 'category', name: '分钟', data: xAxisData },
+            yAxis: { type: 'value', name: '强度' },
+            series: series
+        });
+    });
+}
+
+setInterval(updateChart, 3000);
+updateChart();
+</script>
+
+</body>
+</html>

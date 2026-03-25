@@ -111,7 +111,7 @@ def fetch_stock_data(row, retry=3):
             df['code'] = symbol
             df['name'] = name
 
-            logger.info(f"完成: {symbol}")
+            # logger.info(f"完成: {symbol}")
             return df
 
         except Exception as e:
@@ -136,7 +136,11 @@ def get_stocks_year_multithread(stocks_df, max_workers=6):
             for _, row in stocks_df.iterrows()
         ]
 
-        for future in as_completed(futures):
+        for future in tqdm.tqdm(as_completed(futures), 
+                                total=len(futures), 
+                                desc="处理进度", 
+                                unit="stock",
+                                colour="green"):
             result = future.result()
             if result is not None:
                 all_results.append(result)

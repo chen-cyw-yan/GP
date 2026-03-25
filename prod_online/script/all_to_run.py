@@ -3,6 +3,7 @@ import fetch_stock_data_for_multithread as fetch_stock
 import stock_selector_for_myself as selector
 import stock_deep_report as deep_report
 import block_analysis
+import get_now_stock_data as now_stock
 # ==============================
 # 日志配置
 # ==============================
@@ -14,7 +15,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 def main():
     logger.info("更新日线数据...")
-    fetch_stock.main()
+    # fetch_stock.main()
+    now_stock.main()
     logger.info("更新日线数据完成..")
     
     logger.info("进行计算策略..")
