@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>实时自动刷新折线图</title>
+    
+    <!-- 引入 Vue 3 -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <!-- 引入 Axios -->
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <!-- 引入 ECharts -->
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #f4f6f8;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 1200px;
+            
+            /* Flex 布局让内容撑开高度 */
+            display: flex;
+            flex-direction: column;
+            min-height: 500px; 
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            flex-shrink: 0;
+        }
+
+        h2 {
+            color: #2c3e50;
+            margin: 0;
+            font-size: 1.2rem;
+        }
+
+        .status-badge {
+            font-size: 12px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            background-color: #eef2f7;
+            color: #666;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: #ccc;
+            transition: background-color 0.3s;
+        }
+        .dot.active { background-color: #2ecc71; box-shadow: 0 0 5px #2ecc71; }
+        .dot.loading { background-color: #f1c40f; animation: pulse 1s infinite; }
+        .dot.error { background-color: #e74c3c; }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        #chart-container {
+            flex: 1; 
+            width: 100%;
+            min-height: 300px; 
+            position: relative;
+        }
+
+        .status-msg {
+            text-align: center;
+            padding: 40px;
+            font-size: 16px;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        .loading { color: #3498db; }
+        .error { color: #e74c3c; }
+        
+        .controls {
+            text-align: center;
+            margin-top: 15px;
+            flex-shrink: 0;
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        button {
+            padding: 8px 20px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+        button:hover:not(:disabled) {
+            background-color: #2980b9;
+        }
+        button:disabled {
+            background-color: #bdc3c7;
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+        button.secondary {
+            background-color: #95a5a6;
+        }
+        button.secondary:hover:not(:disabled) {
+            background-color: #7f8c8d;
+        }
+    </style>
+</head>
+<body>
+
+<div id="app" class="container">
+    <!-- 头部：标题 + 状态指示灯 -->
+    <div class="header">
+        <h2>实时数据监控 (自动刷新)</h2>
+        <div class="status-badge">
+            <span class="dot" :class="statusClass"></span>
+            <span>{{ statusText }}</span>
+            <span v-if="lastUpdated" style="margin-left: 5px; font-size: 10px; color: #999;">
+                上次更新: {{ lastUpdated }}
+            </span>
+        </div>
+    </div>
+
+    <!-- 状态显示 (加载/错误) -->
+    <div v-if="initialLoading" class="status-msg loading">
+        <div>正在初始化图表...</div>
+    </div>
+
+    <div v-else-if="errorMsg" class="status-msg error">
+        <div>{{ errorMsg }}</div>
+        <div style="font-size: 12px; color: #666; margin-top: 10px;">
+            请检查后端是否启动 (http://127.0.0.1:5000/data) 及 CORS 配置。
+        </div>
+    </div>
+
+    <!-- 图表区域 -->
+    <div v-show="!initialLoading && !errorMsg" id="chart-container"></div>
+
+    <!-- 控制按钮 -->
+    <div class="controls" v-show="!initialLoading">
+        <button @click="toggleAutoRefresh" :disabled="isFetching">
+            {{ autoRefresh ? '暂停自动刷新' : '开启自动刷新' }}
+        </button>
+        <button @click="fetchData" class="secondary" :disabled="isFetching || autoRefresh">
+            手动刷新
+        </button>
+        <span style="font-size: 12px; color: #666; align-self: center; margin-left: 10px;">
+            刷新间隔: {{ intervalMs / 1000 }}秒
+        </span>
+    </div>
+</div>
+
+<script>
+    const { createApp, ref, onMounted, onBeforeUnmount, computed, nextTick } = Vue;
+
+    createApp({
+        setup() {
+            // 配置
+            const API_URL = 'http://127.0.0.1:5000/data';
+            const intervalMs = 10000; // 自动刷新间隔：5000ms = 5秒
+
+            // 状态变量
+            const initialLoading = ref(true);
+            const isFetching = ref(false);
+            const errorMsg = ref('');
+            const autoRefresh = ref(true); // 默认开启自动刷新
+            const lastUpdated = ref('');
+            
+            let chartInstance = null;
+            let timer = null;
+
+            // 计算属性：状态指示灯样式
+            const statusClass = computed(() => {
+                if (isFetching.value) return 'loading';
+                if (errorMsg.value) return 'error';
+                return 'active';
+            });
+
+            // 计算属性：状态文字
+            const statusText = computed(() => {
+                if (isFetching.value) return '获取数据中...';
+                if (errorMsg.value) return '连接失败';
+                return autoRefresh.value ? '实时监控中' : '已暂停';
+            });
+
+            // 初始化 ECharts
+            const initChart = () => {
+                const dom = document.getElementById('chart-container');
+                if (!dom) return;
+                
+                if (chartInstance) {
+                    chartInstance.dispose();
+                }
+                
+                chartInstance = echarts.init(dom);
+                
+                // 监听容器大小变化
+                const resizeObserver = new ResizeObserver(() => {
+                    if (chartInstance) chartInstance.resize();
+                });
+                resizeObserver.observe(dom);
+            };
+
+            // 数据处理逻辑
+            const processApiData = (apiResponse) => {
+                if (!Array.isArray(apiResponse) || apiResponse.length === 0) {
+                    throw new Error("数据为空或格式错误");
+                }
+
+                const seriesList = [];
+                let xAxisData = [];
+                let isXAxisSet = false;
+
+                apiResponse.forEach((item, index) => {
+                    const name = item.name || `系列 ${index + 1}`;
+                    const rawData = item.data || [];
+                    if (!Array.isArray(rawData)) return;
+
+                    const currentX = rawData.map(p => p[0]);
+                    const currentY = rawData.map(p => p[1]);
+
+                    if (!isXAxisSet) {
+                        xAxisData = currentX;
+                        isXAxisSet = true;
+                    }
+
+                    seriesList.push({
+                        name: name,
+                        type: 'line',
+                        data: currentY,
+                        smooth: true,
+                        symbol: 'circle',
+                        symbolSize: 6,
+                        lineStyle: { width: 2 },
+                        areaStyle: { opacity: 0.15 },
+                        animationDuration: 800, // 平滑过渡动画
+                        animationEasing: 'cubicOut'
+                    });
+                });
+
+                return { xAxisData, seriesList };
+            };
+
+            // 更新图表选项
+            const updateChartOption = (xAxisData, seriesList) => {
+                if (!chartInstance) return;
+
+                const option = {
+                    tooltip: {
+                        trigger: 'axis',
+                        backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                        borderColor: '#eee',
+                        borderWidth: 1,
+                        textStyle: { color: '#333' }
+                    },
+                    legend: {
+                        data: seriesList.map(s => s.name),
+                        bottom: 0,
+                        textStyle: { fontSize: 12 }
+                    },
+                    grid: {
+                        left: '3%', right: '3%', top: '10%', bottom: '15%',
+                        containLabel: true
+                    },
+                    xAxis: {
+                        type: 'category',
+                        boundaryGap: false,
+                        data: xAxisData,
+                        axisLine: { lineStyle: { color: '#ddd' } },
+                        axisLabel: { rotate: 45, interval: 'auto', fontSize: 10 }
+                    },
+                    yAxis: {
+                        type: 'value',
+                        splitLine: { lineStyle: { type: 'dashed', color: '#eee' } },
+                        axisLabel: { fontSize: 11 }
+                    },
+                    series: seriesList
+                };
+
+                // setOption 第二个参数为 false 表示不合并，完全重绘（适合数据结构变化时）
+                // 这里设为 true 或直接调用，ECharts 会自动处理数据动画
+                chartInstance.setOption(option, { notMerge: true });
+            };
+
+            // 核心：获取数据函数
+            const fetchData = async () => {
+                if (isFetching.value) return;
+                
+                isFetching.value = true;
+                // 如果是第一次加载，保留 initialLoading，否则清除错误
+                if (!initialLoading.value) errorMsg.value = ''; 
+
+                try {
+                    const response = await axios.get(API_URL, { timeout: 5000 });
+                    
+                    // 确保 DOM 就绪
+                    if (initialLoading.value) {
+                        await nextTick();
+                        initChart();
+                    }
+
+                    const { xAxisData, seriesList } = processApiData(response.data);
+                    
+                    if (seriesList.length === 0) throw new Error("无有效数据系列");
+
+                    updateChartOption(xAxisData, seriesList);
+
+                    // 更新成功状态
+                    const now = new Date();
+                    lastUpdated.value = `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}:${now.getSeconds().toString().padStart(2,'0')}`;
+                    initialLoading.value = false;
+
+                } catch (err) {
+                    console.error(err);
+                    initialLoading.value = false;
+                    
+                    if (err.code === 'ERR_NETWORK' || err.message.includes('Network Error')) {
+                        errorMsg.value = "无法连接到服务器 (CORS 错误或后端未启动)";
+                    } else {
+                        errorMsg.value = `数据错误: ${err.message}`;
+                    }
+                    
+                    // 如果连续失败，可以选择暂停自动刷新，这里选择继续尝试但记录错误
+                    // autoRefresh.value = false; 
+                } finally {
+                    isFetching.value = false;
+                }
+            };
+
+            // 定时器管理
+            const startTimer = () => {
+                if (timer) clearInterval(timer);
+                timer = setInterval(() => {
+                    if (autoRefresh.value) {
+                        fetchData();
+                    }
+                }, intervalMs);
+            };
+
+            const toggleAutoRefresh = () => {
+                autoRefresh.value = !autoRefresh.value;
+                if (autoRefresh.value) {
+                    fetchData(); // 开启时立即刷新一次
+                }
+            };
+
+            // 生命周期钩子
+            onMounted(() => {
+                fetchData(); // 首次加载
+                startTimer(); // 启动定时器
+            });
+
+            onBeforeUnmount(() => {
+                if (timer) clearInterval(timer);
+                if (chartInstance) chartInstance.dispose();
+            });
+
+            return {
+                initialLoading,
+                isFetching,
+                errorMsg,
+                autoRefresh,
+                lastUpdated,
+                statusClass,
+                statusText,
+                intervalMs,
+                fetchData,
+                toggleAutoRefresh
+            };
+        }
+    }).mount('#app');
+</script>
+
+</body>
+</html>

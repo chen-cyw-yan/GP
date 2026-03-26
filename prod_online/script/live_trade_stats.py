@@ -62,7 +62,13 @@ for k,v in df_anal.iterrows():
     pivot_df['max_zb']=v['max_zb']
     pivot_df['min_zb']=v['min_zb']
     pivot_df['buy_ratio']=pivot_df['累计_买盘']/pivot_df['累计_卖盘']
-    pivot_df['buy_ratio_norm'] = (pivot_df['buy_ratio'] - pivot_df['min_buy_ratio']) / (pivot_df['max_buy_ratio'] - pivot_df['min_buy_ratio'])
+    pivot_df['buy_ratio_clip'] = pivot_df['buy_ratio'].clip(pivot_df['min_buy_ratio'], pivot_df['max_buy_ratio'])
+    # pivot_df['buy_ratio_norm'] = (pivot_df['buy_ratio'] - pivot_df['min_buy_ratio']) / (pivot_df['max_buy_ratio'] - pivot_df['min_buy_ratio'])
+    pivot_df['buy_ratio_norm'] = (
+        (pivot_df['buy_ratio_clip'] - pivot_df['min_buy_ratio']) /
+        (pivot_df['max_buy_ratio'] - pivot_df['min_buy_ratio'])
+    )
+    
     pivot_df['stock_code']=v['stock_code']
     pivot_df['stock_name']=v['stock_name']
     ls.append(pivot_df)
@@ -101,7 +107,8 @@ def plot_buy_ratio_line(df):
         
         # 对齐分钟（防止缺失）
         y_axis=tmp['buy_ratio_norm'].round(3).tolist()
-        print(y_axis)
+        
+        y_axis=tmp['buy_ratio'].round(3).tolist()
         line.add_yaxis(
             series_name=stock,
             y_axis=y_axis,

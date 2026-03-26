@@ -290,12 +290,19 @@ def aggregate_yearly_stats(daily_stats_df, candidates_df, engine, conn):
     candidates_df['stock_code'] = candidates_df['stock_code'].astype(str)
     
     # 分组计算极值
+    # stats = daily_stats_df.groupby('code').agg(
+    #     min_buy_ratio=('buy_ratio', 'min'),
+    #     max_buy_ratio=('buy_ratio', 'max'),
+    #     min_zb=('zb', 'min'),
+    #     max_zb=('zb', 'max')
+    # ).reset_index()
     stats = daily_stats_df.groupby('code').agg(
-        min_buy_ratio=('buy_ratio', 'min'),
-        max_buy_ratio=('buy_ratio', 'max'),
-        min_zb=('zb', 'min'),
-        max_zb=('zb', 'max')
+        low_buy_ratio=('buy_ratio', lambda x: x.quantile(0.05)),
+        high_buy_ratio=('buy_ratio', lambda x: x.quantile(0.95)),
+        low_zb=('zb', lambda x: x.quantile(0.05)),
+        high_zb=('zb', lambda x: x.quantile(0.95))
     ).reset_index()
+
     
     # 合并到候选表 (左连接，保留所有需要分析的股票，没有数据的保持 NULL)
     # 注意：pandas merge 后列名可能需要调整以匹配数据库

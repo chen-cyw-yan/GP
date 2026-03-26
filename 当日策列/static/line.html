@@ -1,49 +1,287 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-CN">
 <head>
-    <meta charset="utf-8">
-    <script src="https://cdn.jsdelivr.net/npm/echarts/dist/echarts.min.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>全屏卡片折线图</title>
+    
+    <!-- 引入 Vue 3 -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <!-- 引入 Axios -->
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <!-- 引入 ECharts -->
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #f4f6f8;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            /* 让身体高度占满屏幕，方便测试卡片效果 */
+            min-height: 100vh; 
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .container {
+            background: white;
+            padding: 20px; /* 统一内边距 */
+            border-radius: 12px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 1200px;
+            
+            /* 【关键修改】使用 Flex 布局让内容撑开高度 */
+            display: flex;
+            flex-direction: column;
+            
+            /* 设定一个最小高度，确保卡片不会太扁 */
+            min-height: 500px; 
+            /* 如果你希望卡片高度固定为屏幕的某个比例，可以使用下面这行代替 min-height */
+            /* height: 80vh; */
+        }
+
+        h2 {
+            text-align: center;
+            color: #2c3e50;
+            margin: 0 0 20px 0; /* 移除底部默认边距，用 padding 控制 */
+            flex-shrink: 0; /* 防止标题被压缩 */
+        }
+
+        /* 【关键修改】图表容器自动占据剩余空间 */
+        #chart-container {
+            flex: 1; 
+            width: 100%;
+            /* 最小高度限制，防止数据加载前高度为0 */
+            min-height: 300px; 
+            position: relative;
+        }
+
+        .status-msg {
+            text-align: center;
+            padding: 40px;
+            font-size: 16px;
+            flex: 1; /* 让提示信息也居中占满剩余空间 */
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        .loading { color: #3498db; }
+        .error { color: #e74c3c; }
+        
+        .controls {
+            text-align: center;
+            margin-top: 20px;
+            flex-shrink: 0; /* 防止按钮被压缩 */
+        }
+        button {
+            padding: 10px 25px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        button:disabled {
+            background-color: #bdc3c7;
+            cursor: not-allowed;
+        }
+    </style>
 </head>
 <body>
 
-<div id="chart" style="width:100%;height:600px;"></div>
+<div id="app" class="container">
+    <h2>数据趋势监控 (自适应高度)</h2>
+
+    <!-- 状态显示 -->
+    <div v-if="loading" class="status-msg loading">
+        <div>正在加载数据...</div>
+    </div>
+
+    <div v-else-if="error" class="status-msg error">
+        <div>{{ error }}</div>
+        <div style="font-size: 12px; color: #666; margin-top: 10px;">提示：请检查后端是否启动及 CORS 配置。</div>
+    </div>
+
+    <!-- 图表区域 -->
+    <div v-show="!loading && !error" id="chart-container"></div>
+
+    <div class="controls" v-show="!loading && !error">
+        <button @click="fetchData" :disabled="loading">刷新数据</button>
+    </div>
+</div>
 
 <script>
-var chart = echarts.init(document.getElementById('chart'));
+    const { createApp, ref, onMounted, nextTick } = Vue;
 
-function updateChart() {
-    fetch('http://127.0.0.1:5000/data')
-    .then(res => res.json())
-    .then(data => {
+    createApp({
+        setup() {
+            const loading = ref(false);
+            const error = ref('');
+            let chartInstance = null;
 
-        let xAxisData = [];
-        let series = [];
+            const initChart = () => {
+                const dom = document.getElementById('chart-container');
+                if (!dom) return;
+                
+                if (chartInstance) {
+                    chartInstance.dispose();
+                }
+                
+                // 初始化图表
+                chartInstance = echarts.init(dom);
+                
+                // 监听窗口大小变化，自动重绘
+                const resizeObserver = new ResizeObserver(() => {
+                    if (chartInstance) {
+                        chartInstance.resize();
+                    }
+                });
+                resizeObserver.observe(dom);
+            };
 
-        data.forEach(item => {
-            let yData = item.data.map(d => d[1]);  // y 值
-            let xData = item.data.map(d => d[0]);  // x 值
-            xAxisData = xData;  // 假设每个股票的分钟一致
+            const processApiData = (apiResponse) => {
+                if (!Array.isArray(apiResponse) || apiResponse.length === 0) {
+                    throw new Error("返回的数据格式不正确或为空数组");
+                }
 
-            series.push({
-                name: item.name,
-                type: 'line',
-                smooth: true,
-                data: yData
+                const seriesList = [];
+                let xAxisData = [];
+                let isXAxisSet = false;
+
+                apiResponse.forEach((item, index) => {
+                    const name = item.name || `系列 ${index + 1}`;
+                    const rawData = item.data || [];
+
+                    if (!Array.isArray(rawData)) return;
+
+                    const currentX = rawData.map(point => point[0]);
+                    const currentY = rawData.map(point => point[1]);
+
+                    if (!isXAxisSet) {
+                        xAxisData = currentX;
+                        isXAxisSet = true;
+                    }
+
+                    seriesList.push({
+                        name: name,
+                        type: 'line',
+                        data: currentY,
+                        smooth: true,
+                        symbol: 'circle',
+                        symbolSize: 6,
+                        lineStyle: { width: 2 },
+                        areaStyle: { opacity: 0.15 }
+                    });
+                });
+
+                return { xAxisData, seriesList };
+            };
+
+            const updateChart = (xAxisData, seriesList) => {
+                if (!chartInstance) return;
+
+                const option = {
+                    tooltip: {
+                        trigger: 'axis',
+                        backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                        borderColor: '#ccc',
+                        borderWidth: 1,
+                        textStyle: { color: '#333' }
+                    },
+                    legend: {
+                        data: seriesList.map(s => s.name),
+                        bottom: 0, // 图例贴底
+                        textStyle: { fontSize: 12 }
+                    },
+                    // 【关键修改】减小网格边距，让图表真正“占满”
+                    grid: {
+                        left: '3%',
+                        right: '3%',
+                        top: '10%', // 给标题留点位置
+                        bottom: '15%', // 给图例和X轴标签留位置
+                        containLabel: true
+                    },
+                    xAxis: {
+                        type: 'category',
+                        boundaryGap: false,
+                        data: xAxisData,
+                        axisLine: { lineStyle: { color: '#ddd' } },
+                        axisLabel: { 
+                            rotate: 45,
+                            interval: 'auto', // 自动隐藏重叠标签
+                            fontSize: 10
+                        }
+                    },
+                    yAxis: {
+                        type: 'value',
+                        splitLine: { 
+                            lineStyle: { 
+                                type: 'dashed', 
+                                color: '#eee' 
+                            } 
+                        },
+                        axisLabel: { fontSize: 11 }
+                    },
+                    series: seriesList
+                };
+
+                chartInstance.setOption(option);
+            };
+
+            const fetchData = async () => {
+                loading.value = true;
+                error.value = '';
+
+                try {
+                    const response = await axios.get('http://127.0.0.1:5000/data');
+                    
+                    await nextTick();
+                    initChart();
+
+                    const { xAxisData, seriesList } = processApiData(response.data);
+                    
+                    if (seriesList.length === 0) {
+                        throw new Error("解析后没有有效的数据系列");
+                    }
+
+                    // 稍微延迟一下确保 DOM 高度计算正确（特别是在 flex 布局下）
+                    setTimeout(() => {
+                        updateChart(xAxisData, seriesList);
+                    }, 50);
+
+                } catch (err) {
+                    console.error(err);
+                    if (err.code === 'ERR_NETWORK') {
+                        error.value = "网络错误：无法连接到后端。";
+                    } else {
+                        error.value = "数据错误：" + (err.message || "未知错误");
+                    }
+                } finally {
+                    loading.value = false;
+                }
+            };
+
+            onMounted(() => {
+                fetchData();
             });
-        });
 
-        chart.setOption({
-            tooltip: { trigger: 'axis' },
-            legend: { data: data.map(d => d.name) },
-            xAxis: { type: 'category', name: '分钟', data: xAxisData },
-            yAxis: { type: 'value', name: '强度' },
-            series: series
-        });
-    });
-}
-
-setInterval(updateChart, 3000);
-updateChart();
+            return {
+                loading,
+                error,
+                fetchData
+            };
+        }
+    }).mount('#app');
 </script>
 
 </body>

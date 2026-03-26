@@ -1,5 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
-
+from flask_cors import CORS
 
 from sqlalchemy import create_engine
 import pandas as pd
@@ -30,11 +30,11 @@ def fetch_one_stock(v):
         pivot_df['累计_买盘'] = pivot_df.get('买盘', 0).cumsum()
         pivot_df['累计_卖盘'] = pivot_df.get('卖盘', 0).cumsum()
 
-        pivot_df['buy_ratio'] = pivot_df['累计_买盘'] / (pivot_df['累计_卖盘'] + 1e-6)
+        pivot_df['buy_ratio'] = pivot_df['累计_买盘'] / (pivot_df['累计_卖盘'])
 
         pivot_df['buy_ratio_norm'] = (
             (pivot_df['buy_ratio'] - v['min_buy_ratio']) /
-            (v['max_buy_ratio'] - v['min_buy_ratio'] + 1e-6)
+            (v['max_buy_ratio'] - v['min_buy_ratio'])
         )
 
         pivot_df['stock_name'] = v['stock_name']
@@ -70,7 +70,7 @@ import time
 app = Flask(__name__)
 
 global_data = []
-
+CORS(app)
 # 后台线程：持续更新数据
 def data_updater():
     global global_data
@@ -89,10 +89,12 @@ def data_updater():
         data = []
         for stock in df_all['stock_name'].unique():
             tmp = df_all[df_all['stock_name'] == stock]
-
+            tmp = tmp.loc[tmp['mintue']!=25]
+            tmp['buy_ratio'] = tmp['buy_ratio'].round(2)
+            tmp['buy_ratio_norm'] = tmp['buy_ratio_norm'].round(3)
             data.append({
                 "name": stock,
-                "data": tmp[['mintue', 'buy_ratio_norm']].values.tolist()
+                "data": tmp[['mintue', 'buy_ratio']].values.tolist()
             })
 
         global_data = data
@@ -102,7 +104,6 @@ def data_updater():
 
 @app.route("/data")
 def get_data():
-    print(global_data)
     return jsonify(global_data)
 
 
