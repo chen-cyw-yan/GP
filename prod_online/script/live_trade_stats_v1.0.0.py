@@ -21,6 +21,7 @@ def fetch_one_stock(v):
         pivot_df = pd.pivot_table(
             dft,
             index='mintue',
+            # index='成交时间',
             columns='性质',
             values='成交量',
             aggfunc='sum',
@@ -92,6 +93,7 @@ def data_updater():
             tmp = tmp.loc[tmp['mintue']!=25]
             tmp['buy_ratio'] = tmp['buy_ratio'].round(2)
             tmp['buy_ratio_norm'] = tmp['buy_ratio_norm'].round(3)
+            tmp=tmp.sort_values('buy_ratio',ascending=False)
             data.append({
                 "name": stock,
                 "data": tmp[['mintue', 'buy_ratio']].values.tolist()
