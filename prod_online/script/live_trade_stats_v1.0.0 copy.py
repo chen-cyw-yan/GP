@@ -237,8 +237,21 @@ where need_to_analysis=1""",
             last_buy_by_stock[stock] = last_buy
 
         top10_stocks = sorted(last_buy_by_stock.items(), key=lambda x: x[1], reverse=True)[:10]
-        
+        print(top10_stocks)
+        for item in top10_stocks:
+            # print(k,v)
+            # last_stock = v[-1][0]
+            name=item[0]
+            print('tmp_by_stock',tmp_by_stock)
+            last_df = tmp_by_stock[name]
+            last_ratio = last_df.iloc[-1]['buy_ratio']
+            last_zb = last_df.iloc[-1]['zb']
+            code=df_all.loc[df_all['stock_name']==name,'stock_code'].to_list()[0]
+            df_one_rate=df_rate.loc[(df_rate['buy_ratio'] >= buy_th) & (df_rate['zb'] >= zb_th)]
 
+
+            # buy_th = last_df.iloc[-1]['buy_ratio']
+            # zb_th = last_df.iloc[-1]['zb']
 
         global_data = [
             {
