@@ -1,18 +1,120 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from flask_cors import CORS
-
+import requests
 from sqlalchemy import create_engine
 import pandas as pd
 import akshare as ak
+import logging
+import datetime
+# ==============================
+# 日志配置
+# ==============================
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
+
 engine = create_engine("mysql+pymysql://root:chen@127.0.0.1:3306/gp")
+def stock_zh_a_tick_tx_js(symbol: str, page_size: int = 1000) :
+    """
+    腾讯财经 - 历史分笔数据 (仅获取第一页，通常包含集合竞价)
+    """
+    big_df = pd.DataFrame()
+    page = 0
+    TX_TIMEOUT = 30  # 单次请求超时秒数
+    try:
+        while page < page_size:
+            url = "http://stock.gtimg.cn/data/index.php"
+            params = {
+                "appn": "detail",
+                "action": "data",
+                "c": symbol,
+                "p": page,
+            }
+            r = requests.get(url, params=params, timeout=TX_TIMEOUT)
+            if r.status_code != 200:
+                break
+                
+            text_data = r.text
+            # 解析腾讯特有的格式
+            if "[" not in text_data:
+                break
+                
+            start_idx = text_data.find("[")
+            data_list = eval(text_data[start_idx:])
+            
+            if len(data_list) < 2:
+                break
+                
+            temp_df = (
+                pd.DataFrame(data_list[1].split("|"))
+                .iloc[:, 0]
+                .str.split("/", expand=True)
+            )
+            if temp_df.empty:
+                break
+
+            val = temp_df.iloc[0, 1] 
+            current_time = pd.to_datetime(val, format='%H:%M:%S', errors='coerce')
+
+            # 2. 检查是否为有效时间（排除 None 或 NaN 的情况）
+            if pd.isna(current_time):
+                # 解析失败或为空，根据需求选择跳过或继续
+                # print("时间解析为空，跳过...")
+                pass 
+            else:
+                # 3. 提取时间部分进行比较
+                # 也可以直接比较 pd.Timestamp，这里为了配合你的逻辑提取 .time()
+                first_time = current_time.time()
+                cutoff_time = pd.to_datetime("09:45:00", format="%H:%M:%S").time()
+                
+                # print('first_time', first_time, cutoff_time)
+                
+                if first_time > cutoff_time:
+                    # print("超过 9:45，执行 break")
+                    break 
+                
+            big_df = pd.concat([big_df, temp_df], ignore_index=True)
+            page += 1
+            
+    except Exception as e:
+        logger.debug(f"抓取 {symbol} 网络异常: {e}")
+        return None
+
+    if big_df.empty:
+        return None
+
+    # 整理列名
+    big_df = big_df.iloc[:, 1:].copy()
+    if len(big_df.columns) >= 6:
+        big_df.columns = ["成交时间", "成交价格", "价格变动", "成交量", "成交金额", "性质"]
+        
+        # 映射性质
+        property_map = {"S": "卖盘", "B": "买盘", "M": "中性盘"}
+        big_df["性质"] = big_df["性质"].map(property_map).fillna("未知")
+        
+        # 类型转换
+        try:
+            big_df["成交价格"] = big_df["成交价格"].astype(float)
+            big_df["成交量"] = pd.to_numeric(big_df["成交量"], errors='coerce').fillna(0).astype(int)
+            big_df["成交金额"] = pd.to_numeric(big_df["成交金额"], errors='coerce').fillna(0).astype(int)
+            big_df["成交时间"] = big_df["成交时间"].astype(str)
+        except Exception as e:
+            logger.warning(f"{symbol} 数据类型转换失败: {e}")
+            
+        return big_df
+    else:
+        return None
 
 
 def fetch_one_stock(v):
     try:
         stock_code = v['stock_code']
-        dft = ak.stock_zh_a_tick_tx_js(symbol=stock_code)
-
-        dft['成交时间'] = pd.to_datetime(dft['成交时间'])
+        dft = stock_zh_a_tick_tx_js(symbol=stock_code)
+        print(dft)
+        dft['成交时间'] = pd.to_datetime(dft['成交时间'], format='%H:%M:%S', errors='coerce')
         dft['hour'] = dft['成交时间'].dt.hour
         dft['mintue'] = dft['成交时间'].dt.minute
 
@@ -40,6 +142,7 @@ def fetch_one_stock(v):
 
         pivot_df['stock_name'] = v['stock_name']
         pivot_df['stock_code'] =stock_code
+        pivot_df['zb']=(pivot_df['累计_买盘'] + (pivot_df['累计_卖盘']))*100/v['outstanding_share']
 
         return pivot_df.reset_index()
 
@@ -75,33 +178,76 @@ CORS(app)
 # 后台线程：持续更新数据
 def data_updater():
     global global_data
+    df_anal = pd.read_sql(
+            """select need.*,stock.outstanding_share  from gp.stock_analysis as need
+join (select s.code,max(s.outstanding_share) as outstanding_share  from gp.stock s group by s.`code` ) as stock
+on need.stock_code=stock.code 
+where need_to_analysis=1""",
+            con=engine
+        )
+
+    df_rate=pd.read_sql("select * from gp.stock_strategy_data_15minute where code in ('"+df_anal['stock_code'].str.cat(sep="','")+"')",con=engine)
+    # print(df_all)
 
     while True:
         print("🔄 更新数据中...")
 
         # ⭐ 每次循环重新读取（关键）
-        df_anal = pd.read_sql(
-            "select * from gp.stock_analysis where need_to_analysis=1",
-            con=engine
-        )
-
         df_all = get_all_data(df_anal)
-        print(df_all)
-        data = []
+        # 防御性判断：抓取失败时 df_all 可能为空或缺少 stock_name 列
+        if df_all.empty or 'stock_name' not in df_all.columns:
+            print("⚠️ 本次未获取到有效数据，跳过。")
+            global_data = []
+            time.sleep(10)
+            continue
+
+        # 只返回：按“最后一条分钟记录的 buy_ratio”从高到低的前 10 只股票
+        tmp_by_stock = {}
+        last_buy_by_stock = {}
+
         for stock in df_all['stock_name'].unique():
             tmp = df_all[df_all['stock_name'] == stock]
-            tmp = tmp.loc[tmp['mintue']!=25]
+            tmp = tmp.loc[tmp['mintue'] != 25]
+
+            if tmp.empty:
+                continue
+
             tmp['buy_ratio'] = tmp['buy_ratio'].round(2)
             tmp['buy_ratio_norm'] = tmp['buy_ratio_norm'].round(3)
-            tmp=tmp.sort_values('buy_ratio',ascending=False)
-            data.append({
+            tmp['zb'] = tmp['zb'].round(5)
+            tmp = tmp.sort_values('mintue')
+            tmp = tmp.iloc[1:]  # 跟你原逻辑一致：去掉第一行
+
+            if tmp.empty:
+                continue
+
+            last_buy = tmp.iloc[-1]['buy_ratio']
+            if last_buy is None:
+                continue
+            try:
+                last_buy = float(last_buy)
+            except Exception:
+                continue
+
+            # 跳过 NaN
+            if pd.isna(last_buy):
+                continue
+
+            tmp_by_stock[stock] = tmp[['mintue', 'buy_ratio', 'zb']].copy()
+            last_buy_by_stock[stock] = last_buy
+
+        top10_stocks = sorted(last_buy_by_stock.items(), key=lambda x: x[1], reverse=True)[:10]
+
+        global_data = [
+            {
                 "name": stock,
-                "data": tmp[['mintue', 'buy_ratio']].values.tolist()
-            })
+                "data": tmp_by_stock[stock].values.tolist()
+            }
+            for stock, _ in top10_stocks
+            if stock in tmp_by_stock
+        ]
 
-        global_data = data
-
-        time.sleep(10)
+        time.sleep(30)
 
 
 @app.route("/data")
