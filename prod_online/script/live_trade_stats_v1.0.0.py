@@ -134,11 +134,11 @@ def fetch_one_stock(v):
         pivot_df['累计_卖盘'] = pivot_df.get('卖盘', 0).cumsum()
 
         pivot_df['buy_ratio'] = pivot_df['累计_买盘'] / (pivot_df['累计_卖盘'])
-
-        pivot_df['buy_ratio_norm'] = (
-            (pivot_df['buy_ratio'] - v['min_buy_ratio']) /
-            (v['max_buy_ratio'] - v['min_buy_ratio'])
-        )
+        
+        # pivot_df['buy_ratio_norm'] = (
+        #     (pivot_df['buy_ratio'] - v['min_buy_ratio']) /
+        #     (v['max_buy_ratio'] - v['min_buy_ratio'])
+        # )
 
         pivot_df['stock_name'] = v['stock_name']
         pivot_df['stock_code'] =stock_code
@@ -213,7 +213,7 @@ where need_to_analysis=1""",
                 continue
 
             tmp['buy_ratio'] = tmp['buy_ratio'].round(2)
-            tmp['buy_ratio_norm'] = tmp['buy_ratio_norm'].round(3)
+            # tmp['buy_ratio_norm'] = tmp['buy_ratio_norm'].round(3)
             tmp['zb'] = tmp['zb'].round(5)
             tmp = tmp.sort_values('mintue')
             tmp = tmp.iloc[1:]  # 跟你原逻辑一致：去掉第一行
