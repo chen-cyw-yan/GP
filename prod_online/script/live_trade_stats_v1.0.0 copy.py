@@ -242,13 +242,13 @@ where need_to_analysis=1""",
             # print(k,v)
             # last_stock = v[-1][0]
             name=item[0]
-            print('tmp_by_stock',tmp_by_stock)
+            # print('tmp_by_stock',tmp_by_stock)
             last_df = tmp_by_stock[name]
             last_ratio = last_df.iloc[-1]['buy_ratio']
             last_zb = last_df.iloc[-1]['zb']
             code=df_all.loc[df_all['stock_name']==name,'stock_code'].to_list()[0]
-            df_one_rate=df_rate.loc[(df_rate['buy_ratio'] >= buy_th) & (df_rate['zb'] >= zb_th)]
-
+            df_one_rate=df_rate.loc[(df_rate['code']==code)(df_rate['buy_ratio'] >= last_ratio) & (df_rate['zb'] >= last_zb)]
+            print(df_one_rate)
 
             # buy_th = last_df.iloc[-1]['buy_ratio']
             # zb_th = last_df.iloc[-1]['zb']
