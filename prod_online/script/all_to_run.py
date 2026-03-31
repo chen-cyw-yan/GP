@@ -15,8 +15,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 def main():
     logger.info("更新日线数据...")
-    # fetch_stock.main()
-    now_stock.main()
+    fetch_stock.main()
+    # now_stock.main()
     logger.info("更新日线数据完成..")
     
     logger.info("进行计算策略..")
@@ -28,7 +28,7 @@ def main():
     logger.info("计算所属板块完成..")
 
     logger.info("个股深度分析..")
-    deep_report.main()
+    # deep_report.main()
     logger.info("个股深度分析完成..")
 if __name__ == '__main__':
     main()

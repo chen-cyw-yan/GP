@@ -113,8 +113,8 @@ def fetch_one_stock(v):
     try:
         stock_code = v['stock_code']
         dft = stock_zh_a_tick_tx_js(symbol=stock_code)
-        print(dft)
-        dft['成交时间'] = pd.to_datetime(dft['成交时间'], format='%H:%M:%S', errors='coerce')
+        # print(dft)
+        dft['成交时间'] = pd.to_datetime(dft['成交时间'])
         dft['hour'] = dft['成交时间'].dt.hour
         dft['mintue'] = dft['成交时间'].dt.minute
 
@@ -237,32 +237,52 @@ where need_to_analysis=1""",
             last_buy_by_stock[stock] = last_buy
 
         top10_stocks = sorted(last_buy_by_stock.items(), key=lambda x: x[1], reverse=True)[:10]
-        print(top10_stocks)
+        # print(top10_stocks)
+        # for item in top10_stocks:
+        #     name=item[0]
+        #     last_df = tmp_by_stock[name]
+        #     last_ratio = last_df.iloc[-1]['buy_ratio']
+        #     last_zb = last_df.iloc[-1]['zb']
+        #     code=df_all.loc[df_all['stock_name']==name,'stock_code'].to_list()[0]
+        #     df_one_rate=df_rate.loc[(df_rate['code']==code)&(df_rate['buy_ratio'] >= last_ratio) & (df_rate['zb'] >= last_zb)]
+        #     tmp_by_stock[stock]['win_rate']=round((df_one_rate['mrzf_and_next_sum']>0).mean(),2)
         for item in top10_stocks:
-            # print(k,v)
-            # last_stock = v[-1][0]
-            name=item[0]
-            # print('tmp_by_stock',tmp_by_stock)
+            name = item[0]
+
             last_df = tmp_by_stock[name]
+
             last_ratio = last_df.iloc[-1]['buy_ratio']
             last_zb = last_df.iloc[-1]['zb']
-            code=df_all.loc[df_all['stock_name']==name,'stock_code'].to_list()[0]
-            df_one_rate=df_rate.loc[(df_rate['code']==code)(df_rate['buy_ratio'] >= last_ratio) & (df_rate['zb'] >= last_zb)]
-            print(df_one_rate)
 
-            # buy_th = last_df.iloc[-1]['buy_ratio']
-            # zb_th = last_df.iloc[-1]['zb']
+            code = df_all.loc[df_all['stock_name'] == name, 'stock_code'].iloc[0]
 
+            df_one_rate = df_rate[
+                (df_rate['code'] == code) &
+                (df_rate['buy_ratio'] >= last_ratio) &
+                (df_rate['zb'] >= last_zb)
+            ]
+
+            if df_one_rate.empty:
+                win_rate = None
+            else:
+                win_rate = round((df_one_rate['mrzf_and_next_sum'] > 0).mean(), 2)
+                all_cnt=(df_one_rate['mrzf_and_next_sum']).count()
+                win_cnt=(df_one_rate['mrzf_and_next_sum'] > 0).sum()
+            print(all_cnt,win_cnt)
+            # ⭐ 给整列赋值（不是只一行）
+            tmp_by_stock[name]['win_rate'] = win_rate
+            tmp_by_stock[name]['cnt'] = all_cnt
+            tmp_by_stock[name]['win_cnt'] = win_cnt
+
+        # print(tmp_by_stock)
         global_data = [
             {
                 "name": stock,
-                "data": tmp_by_stock[stock].values.tolist()
+                "data": tmp_by_stock[stock][['mintue', 'buy_ratio', 'zb', 'win_rate','cnt','win_cnt']].values.tolist()
             }
             for stock, _ in top10_stocks
             if stock in tmp_by_stock
         ]
-        print('global_data',global_data)
-        # exit(0)
         time.sleep(30)
 
 

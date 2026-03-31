@@ -283,6 +283,7 @@
                     <tr>
                         <th>排名</th>
                         <th>股票</th>
+                        <th class="num">胜率</th>
                         <th class="num">buy_ratio（最大）</th>
                         <th class="num">zb（最大）</th>
                     </tr>
@@ -291,6 +292,7 @@
                     <tr v-for="(row, idx) in topTenRows" :key="row.name">
                         <td>{{ idx + 1 }}</td>
                         <td>{{ row.name }}</td>
+                        <td class="num">{{ row.win_rate}}({{row.win_cnt}}/{{row.cnt}})</td>
                         <td class="num">{{ row.buy_ratio.toFixed(2) }}</td>
                         <td class="num">
                             {{ row.zb === null || row.zb === undefined ? '-' : row.zb.toFixed(5) }}
@@ -427,15 +429,25 @@
                     const lastPoint = raw[raw.length - 1] || [];
                     const lastBuy = Number(lastPoint[1]);
                     const lastZb = raw[raw.length - 1].length > 2 ? Number(lastPoint[2]) : null;
+                    const winRate = lastPoint.length > 3 ? Number(lastPoint[3]) : null; // ⭐
+                    const winCnt=Number(lastPoint[5]);
+                    const Cnt=Number(lastPoint[4]);
 
                     if (Number.isNaN(lastBuy)) return;
                     const roundedBuy = Math.round(lastBuy * 100) / 100;
                     const roundedZb = lastZb === null || Number.isNaN(lastZb) ? null : Math.round(lastZb * 100000) / 100000;
-
+                    const roundedWinRate =winRate === null || Number.isNaN(winRate) ? null : Math.round(winRate * 1000) / 1000;
+                    
+                    
+                    
+                    
                     rows.push({
                         name,
                         buy_ratio: roundedBuy,
-                        zb: roundedZb
+                        zb: roundedZb,
+                        win_rate: winRate,
+                        win_cnt:winCnt,
+                        cnt:Cnt
                     });
                 });
 

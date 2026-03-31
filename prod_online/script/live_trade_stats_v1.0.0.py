@@ -113,8 +113,8 @@ def fetch_one_stock(v):
     try:
         stock_code = v['stock_code']
         dft = stock_zh_a_tick_tx_js(symbol=stock_code)
+        dft['成交时间']=pd.to_datetime(dft['成交时间'])
         print(dft)
-        dft['成交时间'] = pd.to_datetime(dft['成交时间'], format='%H:%M:%S', errors='coerce')
         dft['hour'] = dft['成交时间'].dt.hour
         dft['mintue'] = dft['成交时间'].dt.minute
 
@@ -196,7 +196,7 @@ where need_to_analysis=1""",
         df_all = get_all_data(df_anal)
         # 防御性判断：抓取失败时 df_all 可能为空或缺少 stock_name 列
         if df_all.empty or 'stock_name' not in df_all.columns:
-            print("⚠️ 本次未获取到有效数据，跳过。")
+            # print("⚠️ 本次未获取到有效数据，跳过。")
             global_data = []
             time.sleep(10)
             continue
@@ -248,7 +248,7 @@ where need_to_analysis=1""",
             for stock, _ in top10_stocks
             if stock in tmp_by_stock
         ]
-        print('global_data',global_data)
+        # print('global_data',global_data)
         # exit(0)
         time.sleep(30)
 

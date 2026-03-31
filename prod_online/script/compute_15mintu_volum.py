@@ -4,7 +4,10 @@ import json
 import logging
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
+import warnings
 
+# 全局忽略所有警告
+warnings.filterwarnings('ignore')
 import pandas as pd
 import numpy as np
 import tqdm
@@ -44,7 +47,12 @@ def get_db_connection():
     )
     engine = create_engine(DB_URL)
     return conn, engine
-
+def clean_nan_for_mysql(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    将 DataFrame 中的 NaN / inf 全部转为 None（MySQL 可识别）
+    """
+    df = df.replace([np.inf, -np.inf], np.nan)
+    return df.applymap(lambda x: None if pd.isna(x) else x)
 def fetch_analysis_candidates(engine):
     """
     从数据库获取需要分析的股票列表及股本信息
@@ -173,11 +181,21 @@ def process_daily_indicators(df_raw):
             today_open = float(today_open)
             today_close = float(today_close)
             yes_close = float(yes_close)
-            buy_price=float(v.loc[(v['hour']==9) & (v['minute']==35), 'close'])
+            buy_price=float(v.loc[(v['hour']==9) & (v['minute']==45), 'close'])
             # 计算涨幅
             zf = round((today_close - yes_close) / yes_close, 4) if yes_close != 0 else 0.0
             sjzf = round((today_close - today_open) / today_open, 4) if today_open != 0 else 0.0
-            mrzf = round((today_close - buy_price) / buy_price, 2)
+            buy_price_series = v.loc[(v['hour']==9) & (v['minute']==35), 'close']
+
+            if buy_price_series.empty:
+                continue
+
+            buy_price = float(buy_price_series.iloc[0])
+
+            if buy_price == 0 or pd.isna(buy_price):
+                mrzf = None
+            else:
+                mrzf = round((today_close - buy_price) / buy_price, 2)
             # 构建新列
             v = v.copy() # 避免 SettingWithCopyWarning
             v['today_high'] = today_high
@@ -314,32 +332,24 @@ def aggregate_yearly_stats(daily_stats_df, candidates_df, engine, conn):
     
     # 填充需要的列，如果 merge 产生重复列，选择正确的
     # 这里的逻辑是：用计算出的 stats 更新 update_df 中的对应列
-    for col in ['min_buy_ratio', 'max_buy_ratio', 'min_zb', 'max_zb']:
-        if col in stats.columns:
-            # 将计算结果映射回原表
-            mapping = stats.set_index('code')[col].to_dict()
-            update_df[col] = update_df['stock_code'].map(mapping)
+    final_df=update_df[['stock_code', 'stock_name', 'need_to_analysis', 'trigger_count',
+       'is_abnormal_type', 'warning_info', 'industry_block', 'concept_block',
+       'region_block', 'concept_block_resonance','low_buy_ratio','high_buy_ratio','low_zb','high_zb'
+       ]]
+    final_df=final_df.rename(columns={
+        'low_buy_ratio':'min_buy_ratio', 'high_buy_ratio':'max_buy_ratio',
+       'low_zb':'min_zb', 'high_zb':'max_zb'
+    })
+    final_df = clean_nan_for_mysql(final_df)
 
-    # 准备写入数据库的列
-    target_cols = [
-        'stock_code', 'stock_name', 'need_to_analysis', 'trigger_count',
-        'is_abnormal_type', 'warning_info', 'industry_block', 'concept_block',
-        'region_block', 'concept_block_resonance',
-        'min_buy_ratio', 'max_buy_ratio', 'min_zb', 'max_zb'
-    ]
-    
-    # 确保所有目标列都存在
-    final_df = update_df[[c for c in target_cols if c in update_df.columns]]
-    
-    # 替换 NaN 为 None (SQL NULL)
-    final_df = final_df.where(pd.notnull(final_df), None)
-    
+    # final_df=final_df.fillna('')
+    # return final_df
     rows_data = final_df.values.tolist()
     columns_str = ','.join([f"`{c}`" for c in final_df.columns])
     placeholders = ','.join(['%s'] * len(final_df.columns))
-    
+    # print(columns_str,placeholders)
     sql = f"REPLACE INTO gp.stock_analysis ({columns_str}) VALUES ({placeholders})"
-    
+    # print(final_df)
     try:
         cursor=conn.cursor()
         cursor.executemany(sql, rows_data)
@@ -349,36 +359,47 @@ def aggregate_yearly_stats(daily_stats_df, candidates_df, engine, conn):
     except Exception as e:
         logger.error(f"数据库更新失败: {e}")
         raise
-def buy_price_next_zf(daily_stats_df,conn):
-    min15_df_ls=[]
-    for k,v in tqdm.tqdm(daily_stats_df.groupby('code')):
-        v=v.sort_values('date')
-        v['next_day_zf']=v['zf'].shift(-1)   
+
+def buy_price_next_zf(daily_stats_df, conn):
+    min15_df_ls = []
+
+    for k, v in tqdm.tqdm(daily_stats_df.groupby('code')):
+        v = v.sort_values('date')
+
+        v['next_day_zf'] = v['zf'].shift(-1)
         v['zf_and_next_sum'] = v['sjzf'] + v['next_day_zf']
         v['mrzf_and_next_sum'] = v['mrzf'] + v['next_day_zf']
-        # next_day_zf 是 shift(-1) 得来的，分组最后一条通常为 NaN
-        v = v.dropna(subset=['next_day_zf'])
+
+        # ⭐ 严格过滤（关键）
+        v = v.dropna(subset=['next_day_zf', 'zf', 'sjzf', 'mrzf'])
+
+        if v.empty:
+            continue
+
         min15_df_ls.append(v)
+
     if not min15_df_ls:
         return pd.DataFrame()
 
-    min15_all_df=pd.concat(min15_df_ls)
-    # print(min15_all_df.columns)
-    # exit()
+    min15_all_df = pd.concat(min15_df_ls)
 
-    # pymysql 不接受 NaN/inf：需要将其转为 None（MySQL 的 NULL）
-    min15_all_df = min15_all_df.replace([np.inf, -np.inf], np.nan)
-    min15_all_df = min15_all_df.where(pd.notnull(min15_all_df), None)
+    # ⭐⭐⭐ 核心修复
+    min15_all_df = clean_nan_for_mysql(min15_all_df)
 
     rows_data = min15_all_df.values.tolist()
     columns_str = ','.join([f"`{c}`" for c in min15_all_df.columns])
     placeholders = ','.join(['%s'] * len(min15_all_df.columns))
-    sql = f"REPLACE INTO gp.stock_strategy_data_15minute ({columns_str}) VALUES ({placeholders})"
-    print(sql,rows_data)
+
+    sql = f"""
+    REPLACE INTO gp.stock_strategy_data_15minute 
+    ({columns_str}) 
+    VALUES ({placeholders})
+    """
+
     try:
-        cursor=conn.cursor()
+        cursor = conn.cursor()
         cursor.executemany(sql, rows_data)
-        conn.commit() # 提交
+        conn.commit()
         logger.info(f"成功更新 {len(rows_data)} 条记录到数据库")
         return min15_all_df
     except Exception as e:
@@ -406,7 +427,7 @@ def main():
 
         # 3. 设定时间范围 (近一年)
         today_dt = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
-        one_year_ago = today_dt - relativedelta(years=1)
+        one_year_ago = today_dt - relativedelta(years=2)
         start_date = one_year_ago.strftime("%Y-%m-%d")
         end_date = today_dt.strftime("%Y-%m-%d")
 
