@@ -199,8 +199,8 @@ def main():
         """
     filter_stock.toSql(sql=sql, rows=rows_data)
 
-
-    today_df=df_tmp.loc[df_tmp['trade_date'].astype(str)==today_str]
+    last_day=df_tmp.loc[df_tmp['trade_date']].max()
+    today_df=df_tmp.loc[df_tmp['trade_date'].astype(str)==last_day]
     today_df=today_df[['stock_code','stock_name','trigger_count','is_abnormal_type','warning_info','region_block','industry_block','concept_block']]
     today_rows_data = today_df.values.tolist()
     print('xxxxx',today_df)
