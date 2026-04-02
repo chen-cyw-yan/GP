@@ -333,7 +333,7 @@ def aggregate_yearly_stats(daily_stats_df, candidates_df, engine, conn):
     # 填充需要的列，如果 merge 产生重复列，选择正确的
     # 这里的逻辑是：用计算出的 stats 更新 update_df 中的对应列
     final_df=update_df[['stock_code', 'stock_name', 'need_to_analysis', 'trigger_count',
-       'is_abnormal_type', 'warning_info', 'industry_block', 'concept_block',
+       'is_abnormal_type', 'warning_info', 'industry_block', 'concept_block','trade_date',
        'region_block', 'concept_block_resonance','low_buy_ratio','high_buy_ratio','low_zb','high_zb'
        ]]
     final_df=final_df.rename(columns={

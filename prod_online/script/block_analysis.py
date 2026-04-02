@@ -262,7 +262,7 @@ def save_to_db_and_notify(df_final: pd.DataFrame, engine, conn):
         export_cols = [
             'stock_code', 'stock_name', 'trigger_count','is_abnormal_type','warning_info',
             'industry_block', 'region_block', 'concept_block',
-            'concept_block_resonance', 'create_time', 'update_time'
+            'concept_block_resonance', 'create_time', 'update_time','trade_date'
         ]
         # 确保列存在
         available_export_cols = [c for c in export_cols if c in df_final.columns]
@@ -273,7 +273,7 @@ def save_to_db_and_notify(df_final: pd.DataFrame, engine, conn):
             'stock_code': '股票代码', 'stock_name': '股票名称', 'trigger_count': '触发次数'
             ,'is_abnormal_type':'是否异动类型','warning_info':'下一日可能触发',
             'industry_block': '行业板块', 'region_block': '地区板块', 'concept_block': '概念板块',
-            'concept_block_resonance': '概念共振得分', 'create_time': '创建时间', 'update_time': '更新时间'
+            'concept_block_resonance': '概念共振得分', 'create_time': '创建时间', 'update_time': '更新时间','trade_date':'最新添加时间'
         }
         df_export = df_export.rename(columns={k: v for k, v in rename_map.items() if k in df_export.columns})
         
@@ -364,7 +364,7 @@ def main():
         final_columns = [
             'stock_code', 'stock_name', 'need_to_analysis', 'trigger_count', 'is_abnormal_type', 'warning_info',
             'industry_block', 'concept_block', 'region_block',
-            'create_time', 'update_time', 'resonance_score'
+            'create_time', 'update_time', 'resonance_score','trade_date'
         ]
         available_cols = [c for c in final_columns if c in df_analy.columns]
         df_final = df_analy[available_cols].copy()
