@@ -283,7 +283,7 @@ where need_to_analysis=1""",
             for stock, _ in top10_stocks
             if stock in tmp_by_stock
         ]
-        time.sleep(30)
+        time.sleep(15)
 
 
 @app.route("/data")
