@@ -108,7 +108,7 @@ def toSql(sql: str, rows: list,conn):
         raise ConnectionError("[ERROR] 连接数据库失败，具体原因是：" + str(e))
 
 def main():
-    sqls="select * from gp.stock_analysis where need_to_analysis=1 limit 2"
+    sqls="select * from gp.stock_analysis where need_to_analysis=1"
     conn, engine = get_db_connection()
     df_analysis=pd.read_sql(sql=sqls,con=engine)
     rules_ls=[]
