@@ -34,11 +34,11 @@ def analyze_and_get_thresholds(stock_code, date_str):
     # --- 计算金额阈值 ---
     # quantile(0.9) 表示从小到大排列，排在 90% 位置的数值
     threshold_amt_big = df_continuous['成交金额'].quantile(0.90)
-    threshold_amt_small = df_continuous['成交金额'].quantile(0.30)
+    threshold_amt_small = df_continuous['成交金额'].quantile(0.40)
     
     # --- 计算手数阈值 ---
     threshold_vol_big = df_continuous['成交量'].quantile(0.90)
-    threshold_vol_small = df_continuous['成交量'].quantile(0.30)
+    threshold_vol_small = df_continuous['成交量'].quantile(0.40)
 
     # 4. 输出结果 (格式化)
     print("-" * 40)
