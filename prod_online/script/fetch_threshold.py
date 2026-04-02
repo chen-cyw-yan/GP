@@ -64,7 +64,7 @@ def analyze_and_get_thresholds(stock_code, date_str):
 # ==========================
 if __name__ == "__main__":
     # 这里填入你想分析的股票和日期
-    code = "sz002487"
+    code = "sh603122"
     date = "20231025"  # 请确保这个日期有数据
     
     # 运行分析
