@@ -36,4 +36,5 @@ downloads
 *.spec
 *.xlsx
 *.xls
+*.pyc
 脚本/标准转换/处理表-分步
