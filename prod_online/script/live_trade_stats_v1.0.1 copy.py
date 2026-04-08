@@ -6,6 +6,8 @@ import pandas as pd
 import akshare as ak
 import logging
 import datetime
+import warnings
+warnings.filterwarnings('ignore')
 # ==============================
 # 日志配置
 # ==============================
@@ -110,124 +112,111 @@ def stock_zh_a_tick_tx_js(symbol: str, page_size: int = 1000) :
         return big_df
     else:
         return None
-
-
+def safe_cumsum(df, col):
+    return df.get(col, pd.Series(0, index=df.index)).cumsum()
 def fetch_one_stock(v):
     try:
         stock_code = v['stock_code']
-        
-        # 读取配置参数 (来自 stock_analysis 表)
-        amt_big_threshold = v.get('amt_big', 100_0000)  # 默认 100万
-        amt_small_threshold = v.get('amt_small', 10_0000) # 默认 10万
-        vol_big_threshold = v.get('vol_big', 1000)         # 默认 1000手
-        vol_small_threshold = v.get('vol_small', 100)      # 默认 100手
+        dft = stock_zh_a_tick_tx_js(symbol=stock_code)
 
-        # 1. 获取原始分笔数据
-        dft_raw = stock_zh_a_tick_tx_js(symbol=stock_code)
-        if dft_raw is None or dft_raw.empty:
+        if dft is None or dft.empty:
             return None
 
-        # 2. 数据清洗与预处理
-        # 腾讯数据原始列：0=未知, 1=成交时间, 2=成交价格, 3=成交量(手), 4=成交金额(元), 5=性质
-        # 我们需要映射列名以便处理
-        dft = dft_raw.copy()
-        dft.columns = ["idx", "成交时间", "成交价格", "成交量", "成交金额", "性质_raw"]
-        
-        # 转换时间
-        dft['成交时间'] = pd.to_datetime(dft['成交时间'], errors='coerce')
-        dft = dft.dropna(subset=['成交时间'])
-        
-        # 提取时分
+        # =========================
+        # 时间处理
+        # =========================
+        dft['成交时间'] = pd.to_datetime(dft['成交时间'])
         dft['hour'] = dft['成交时间'].dt.hour
-        dft['minute'] = dft['成交时间'].dt.minute # 修正拼写错误 (mintue -> minute)
-        
-        # 过滤 9:45 之前的集合竞价数据
-        dft = dft[(dft['hour'] == 9) & (dft['minute'] <= 45)]
-        if dft.empty:
-            return None
+        dft['mintue'] = dft['成交时间'].dt.minute
 
-        # 转换数据类型
-        dft['成交价格'] = pd.to_numeric(dft['成交价格'], errors='coerce')
-        dft['成交量'] = pd.to_numeric(dft['成交量'], errors='coerce').fillna(0).astype(int)
-        dft['成交额计算'] = dft['成交价格'] * dft['成交量'] # 计算单笔成交总额(元)
+        dft = dft[(dft['hour'] == 9) & (dft['mintue'] <= 45)]
 
-        # 3. 资金流向分类 (核心逻辑)
-        # 初始化分类列
-        dft['资金类型'] = '中单' # 默认中单
-        dft['方向'] = dft['性质_raw'].map({'B': '流入', 'S': '流出', 'M': '中性'}).fillna('未知')
+        # =========================
+        # ⭐ 核心1：订单分类（高性能写法）
+        # =========================
+        dft['订单类型'] = '中单'
 
-        # --- 大单判定 (满足任一条件即可) ---
-        # 条件1: 成交额 > amt_big
-        # 条件2: 成交量 > vol_big
-        is_big = (dft['成交额计算'] > amt_big_threshold) | (dft['成交量'] > vol_big_threshold)
-        dft.loc[is_big, '资金类型'] = '大单'
+        # 优先用金额（主逻辑）
+        if pd.notna(v['amt_big']):
+            dft.loc[dft['成交金额'] >= v['amt_big'], '订单类型'] = '大单'
+        if pd.notna(v['amt_small']):
+            dft.loc[dft['成交金额'] <= v['amt_small'], '订单类型'] = '小单'
 
-        # --- 小单判定 (满足任一条件即可) ---
-        # 条件1: 成交额 < amt_small
-        # 条件2: 成交量 < vol_small
-        # 注意: 这里的逻辑是, 如果是大单, 就不会被判定为小单 (因为上面已经赋值了)
-        is_small = (dft['成交额计算'] < amt_small_threshold) | (dft['成交量'] < vol_small_threshold)
-        dft.loc[is_small, '资金类型'] = '小单'
+        # 如果金额没配，用成交量补充
+        if pd.notna(v['vol_big']):
+            dft.loc[dft['成交量'] >= v['vol_big'], '订单类型'] = '大单'
+        if pd.notna(v['vol_small']):
+            dft.loc[dft['成交量'] <= v['vol_small'], '订单类型'] = '小单'
 
-        # 4. 构建复合标签 (如: 大单流入, 小单流出)
-        dft['分类标签'] = dft['资金类型'] + '_' + dft['方向']
+        # =========================
+        # ⭐ 核心2：资金方向
+        # =========================
+        dft['资金方向'] = dft['性质'] + '_' + dft['订单类型']
 
-        # 5. 聚合统计 (按分钟聚合)
-        # 我们需要统计每种类型的成交量(手)
+        # =========================
+        # ⭐ 核心3：pivot（资金拆分）
+        # =========================
         pivot_df = pd.pivot_table(
             dft,
-            index='minute',
-            columns='分类标签',
-            values='成交量', # 统计成交量(手)
-            aggfunc='sum',
-            fill_value=0
-        )
-
-        # 6. 计算累计值和比率 (根据你的原需求保留)
-        # --- 保留原有的 buy_ratio 计算逻辑 (基于原始买盘/卖盘) ---
-        # 如果你需要基于新分类计算比率，需要修改这里的逻辑
-        dft['性质'] = dft['性质_raw'].map({'B': '买盘', 'S': '卖盘', 'M': '中性盘'}).fillna('未知')
-        
-        pivot_original = pd.pivot_table(
-            dft,
-            index='minute',
-            columns='性质',
+            index='mintue',
+            columns='资金方向',
             values='成交量',
             aggfunc='sum',
             fill_value=0
         )
-        
-        pivot_df['累计_买盘'] = pivot_original.get('买盘', 0).cumsum()
-        pivot_df['累计_卖盘'] = pivot_original.get('卖盘', 0).cumsum()
-        
-        # 防止除零错误
-        pivot_df['buy_ratio'] = pivot_df['累计_买盘'] / (pivot_df['累计_卖盘'] + 1e-6)
-        
-        # --- 新增: 计算大中小单净流入 (流入 - 流出) ---
-        # 假设列名为: 大单_流入, 大单_流出
-        pivot_df['大单净流入'] = (
-            pivot_df.get('大单_流入', 0) - pivot_df.get('大单_流出', 0)
-        ).cumsum()
-        
-        pivot_df['小单净流出'] = (
-            pivot_df.get('小单_流出', 0) - pivot_df.get('小单_流入', 0)
-        ).cumsum() # 小单流出通常被视为散户离场
 
-        # 7. 填充股票基本信息
+        # =========================
+        # ⭐ 核心4：累计
+        # =========================
+        pivot_df['累计_买盘'] = (
+            pivot_df.filter(like='买盘').sum(axis=1).cumsum()
+        )
+        pivot_df['累计_卖盘'] = (
+            pivot_df.filter(like='卖盘').sum(axis=1).cumsum()
+        )
+
+        # =========================
+        # ⭐ 原有指标（保留）
+        # =========================
+        pivot_df['buy_ratio'] = pivot_df['累计_买盘'] / (pivot_df['累计_卖盘'] + 1e-8)
+
+        # =========================
+        # ⭐ 新增：大单资金
+        # =========================
+        pivot_df['大单买入'] = safe_cumsum(pivot_df, '买盘_大单')
+        pivot_df['大单卖出'] = safe_cumsum(pivot_df, '卖盘_大单')
+
+
+        pivot_df['大单净流入'] = pivot_df['大单买入'] - pivot_df['大单卖出']
+
+        pivot_df['big_ratio'] = pivot_df['大单买入'] / (pivot_df['大单卖出'] + 1e-8)
+
+        # =========================
+        # ⭐ 新增：小单资金（散户）
+        # =========================
+        pivot_df['小单买入'] = safe_cumsum(pivot_df, '买盘_小单')
+        pivot_df['小单卖出'] = safe_cumsum(pivot_df, '卖盘_小单')
+
+        pivot_df['小单净流入'] = pivot_df['小单买入'] - pivot_df['小单卖出']
+
+        # =========================
+        # ⭐ 成交量占比（zb）
+        # =========================
+        pivot_df['zb'] = (
+            (pivot_df['累计_买盘'] + pivot_df['累计_卖盘'])
+            * 100 / v['outstanding_share']
+        )
+
+        # =========================
+        # 输出字段
+        # =========================
         pivot_df['stock_name'] = v['stock_name']
         pivot_df['stock_code'] = stock_code
-        
-        # 8. 换手率计算 (zb)
-        # 注意: 这里假设 outstanding_share 是总股本(手)
-        # 如果 outstanding_share 是股，需要除以 100
-        pivot_df['zb'] = (
-            (pivot_df['累计_买盘'] + pivot_df['累计_卖盘']) * 100 / v['outstanding_share']
-        )
 
         return pivot_df.reset_index()
 
     except Exception as e:
-        logger.error(f"❌ {v.get('stock_code', '未知')} error:", exc_info=True)
+        print(f"❌ {v['stock_code']} error:", e)
         return None
     
 def get_all_data(df_anal):
@@ -313,7 +302,7 @@ where need_to_analysis=1""",
             if pd.isna(last_buy):
                 continue
 
-            tmp_by_stock[stock] = tmp[['mintue', 'buy_ratio', 'zb']].copy()
+            tmp_by_stock[stock] = tmp[['mintue', 'buy_ratio', 'big_ratio', '大单净流入', '小单净流入', 'zb']].copy()
             last_buy_by_stock[stock] = last_buy
 
         top10_stocks = sorted(last_buy_by_stock.items(), key=lambda x: x[1], reverse=True)[:10]
@@ -358,7 +347,7 @@ where need_to_analysis=1""",
         global_data = [
             {
                 "name": stock,
-                "data": tmp_by_stock[stock][['mintue', 'buy_ratio', 'zb', 'win_rate','cnt','win_cnt']].values.tolist()
+                "data": tmp_by_stock[stock][['mintue', 'buy_ratio', 'zb', 'win_rate','cnt','win_cnt', '大单净流入', '小单净流入']].values.tolist()
             }
             for stock, _ in top10_stocks
             if stock in tmp_by_stock

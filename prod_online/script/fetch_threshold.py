@@ -5,7 +5,7 @@ import logging
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 import warnings
-
+import requests
 # 全局忽略所有警告
 warnings.filterwarnings('ignore')
 import pandas as pd
@@ -35,7 +35,99 @@ DB_CONFIG = {
     'database': 'gp'
 }
 DB_URL = f"mysql+pymysql://{DB_CONFIG['user']}:{DB_CONFIG['password']}@{DB_CONFIG['host']}:3306/{DB_CONFIG['database']}"
+def stock_zh_a_tick_tx_js(symbol: str, page_size: int = 1000) :
+    """
+    腾讯财经 - 历史分笔数据 (仅获取第一页，通常包含集合竞价)
+    """
+    big_df = pd.DataFrame()
+    page = 0
+    TX_TIMEOUT = 30  # 单次请求超时秒数
+    try:
+        while page < page_size:
+            url = "http://stock.gtimg.cn/data/index.php"
+            params = {
+                "appn": "detail",
+                "action": "data",
+                "c": symbol,
+                "p": page,
+            }
 
+
+            
+            r = requests.get(url, params=params, timeout=TX_TIMEOUT)
+            if r.status_code != 200:
+                break
+                
+            text_data = r.text
+            # 解析腾讯特有的格式
+            if "[" not in text_data:
+                break
+                
+            start_idx = text_data.find("[")
+            data_list = eval(text_data[start_idx:])
+            
+            if len(data_list) < 2:
+                break
+                
+            temp_df = (
+                pd.DataFrame(data_list[1].split("|"))
+                .iloc[:, 0]
+                .str.split("/", expand=True)
+            )
+            if temp_df.empty:
+                break
+
+            val = temp_df.iloc[0, 1] 
+            current_time = pd.to_datetime(val, format='%H:%M:%S', errors='coerce')
+
+            # 2. 检查是否为有效时间（排除 None 或 NaN 的情况）
+            if pd.isna(current_time):
+                # 解析失败或为空，根据需求选择跳过或继续
+                # print("时间解析为空，跳过...")
+                pass 
+            else:
+                # 3. 提取时间部分进行比较
+                # 也可以直接比较 pd.Timestamp，这里为了配合你的逻辑提取 .time()
+                first_time = current_time.time()
+                cutoff_time = pd.to_datetime("09:45:00", format="%H:%M:%S").time()
+                
+                # print('first_time', first_time, cutoff_time)
+                
+                if first_time > cutoff_time:
+                    # print("超过 9:45，执行 break")
+                    break 
+                
+            big_df = pd.concat([big_df, temp_df], ignore_index=True)
+            page += 1
+            
+    except Exception as e:
+        logger.debug(f"抓取 {symbol} 网络异常: {e}")
+        return None
+
+    if big_df.empty:
+        return None
+
+    # 整理列名
+    big_df = big_df.iloc[:, 1:].copy()
+    if len(big_df.columns) >= 6:
+        big_df.columns = ["成交时间", "成交价格", "价格变动", "成交量", "成交金额", "性质"]
+        
+        # 映射性质
+        property_map = {"S": "卖盘", "B": "买盘", "M": "中性盘"}
+        big_df["性质"] = big_df["性质"].map(property_map).fillna("未知")
+        
+        # 类型转换
+        try:
+            big_df["成交价格"] = big_df["成交价格"].astype(float)
+            big_df["成交量"] = pd.to_numeric(big_df["成交量"], errors='coerce').fillna(0).astype(int)
+            big_df["成交金额"] = pd.to_numeric(big_df["成交金额"], errors='coerce').fillna(0).astype(int)
+            big_df["成交时间"] = big_df["成交时间"].astype(str)
+        except Exception as e:
+            logger.warning(f"{symbol} 数据类型转换失败: {e}")
+            
+        return big_df
+    else:
+        return None
 def get_db_connection():
     """获取 pymysql 连接和 SQLAlchemy engine"""
     conn = pymysql.connect(
@@ -48,11 +140,12 @@ def get_db_connection():
     engine = create_engine(DB_URL)
     return conn, engine
 def analyze_and_get_thresholds(stock_code):
-    logger.info(f"📊 正在分析股票: {stock_code}...")
+    # logger.info(f"📊 正在分析股票: {stock_code}...")
     
     # 1. 获取数据
     try:
         # 获取分笔数据
+        # df = ak.stock_zh_a_tick_tx_js(symbol=stock_code)
         df = ak.stock_zh_a_tick_tx_js(symbol=stock_code)
     except Exception as e:
         logger(f"❌ 数据获取失败: {e}")
@@ -65,8 +158,10 @@ def analyze_and_get_thresholds(stock_code):
     
     # 过滤掉 09:25:00 的集合竞价数据
     # 原因：集合竞价的单子通常巨大，会严重拉高阈值，导致连续竞价期间的判断失真
-    df_continuous = df[df['成交时间'].dt.hour > 9].copy()
+    # df_continuous = df[(df['成交时间'].dt.hour <= 9)&(df['成交时间'].dt.minute <= 45)&(df['成交时间'].dt.minute > 30)].copy()
+    df_continuous = df[(df['成交时间'].dt.hour > 9)].copy()
     
+    # print(df)
     if df_continuous.empty:
         logger("⚠️ 警告：没有连续竞价数据，将使用全量数据计算。")
         df_continuous = df
@@ -112,7 +207,7 @@ def main():
     conn, engine = get_db_connection()
     df_analysis=pd.read_sql(sql=sqls,con=engine)
     rules_ls=[]
-    for index,row in df_analysis.iterrows():
+    for index,row in tqdm.tqdm(df_analysis.iterrows()):
         # print(row)
         code=row['stock_code']
         rules = analyze_and_get_thresholds(code)

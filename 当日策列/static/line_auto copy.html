@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>实时自动刷新折线图</title>
+    
+    <!-- 引入 Vue 3 -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <!-- 引入 Axios -->
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <!-- 引入 ECharts -->
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #f4f6f8;
+            display: flex;
+            justify-content: flex-start;
+            align-items: stretch;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: none;
+            
+            /* Flex 布局让内容撑开高度 */
+            display: flex;
+            flex-direction: column;
+            height: calc(100vh - 40px);
+            min-height: calc(100vh - 40px);
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            flex-shrink: 0;
+        }
+
+        h2 {
+            color: #2c3e50;
+            margin: 0;
+            font-size: 1.2rem;
+        }
+
+        .status-badge {
+            font-size: 12px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            background-color: #eef2f7;
+            color: #666;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: #ccc;
+            transition: background-color 0.3s;
+        }
+        .dot.active { background-color: #2ecc71; box-shadow: 0 0 5px #2ecc71; }
+        .dot.loading { background-color: #f1c40f; animation: pulse 1s infinite; }
+        .dot.error { background-color: #e74c3c; }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        #chart-container,
+        #chart-container-zb {
+            width: 100%;
+            height: 100%;
+            min-height: 0;
+            position: relative;
+        }
+
+        /* 2 行 2 列网格布局：左侧两张图，右侧表格占右列两行 */
+        .charts-grid {
+            display: grid;
+            grid-template-columns: 1fr 0.95fr;
+            grid-template-rows: 1fr 1fr;
+            gap: 16px;
+            width: 100%;
+            flex: 1;
+            align-items: stretch;
+            height: 100%;
+        }
+
+        .grid-left-top {
+            grid-column: 1;
+            grid-row: 1;
+        }
+
+        .grid-left-bottom {
+            grid-column: 1;
+            grid-row: 2;
+        }
+
+        .grid-right-table {
+            grid-column: 2;
+            grid-row: 1 / span 2;
+        }
+
+        .chart-block {
+            margin-bottom: 0;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chart-block h3 {
+            margin: 0 0 8px 0;
+            font-size: 0.95rem;
+            color: #34495e;
+            font-weight: 600;
+        }
+
+        .top10-wrap {
+            width: 100%;
+            margin-top: 8px;
+            flex-shrink: 0;
+            height: auto; /* 表格容器不强制撑满，减少右侧占用高度 */
+            display: flex;
+            flex-direction: column;
+        }
+
+        .top10-wrap h3 {
+            margin: 0 0 10px 0;
+            font-size: 0.95rem;
+            color: #34495e;
+            font-weight: 600;
+        }
+
+        .top10-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+            background: #fafbfc;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+            flex: 0 0 auto; /* 不拉伸表格高度 */
+        }
+
+        .top10-table th,
+        .top10-table td {
+            padding: 10px 12px;
+            text-align: left;
+            border-bottom: 1px solid #ecf0f1;
+        }
+
+        .top10-table th {
+            background: #eef2f7;
+            color: #2c3e50;
+            font-weight: 600;
+        }
+
+        .top10-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .top10-table tbody tr:hover {
+            background: #f0f4f8;
+        }
+
+        .top10-table .num {
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* 让图表与表格区域更“贴边”地占用空间 */
+        .charts-grid {
+            min-width: 0;
+        }
+
+        .status-msg {
+            text-align: center;
+            padding: 40px;
+            font-size: 16px;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        .loading { color: #3498db; }
+        .error { color: #e74c3c; }
+        
+        .controls {
+            text-align: center;
+            margin-top: 15px;
+            flex-shrink: 0;
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        button {
+            padding: 8px 20px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+        button:hover:not(:disabled) {
+            background-color: #2980b9;
+        }
+        button:disabled {
+            background-color: #bdc3c7;
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+        button.secondary {
+            background-color: #95a5a6;
+        }
+        button.secondary:hover:not(:disabled) {
+            background-color: #7f8c8d;
+        }
+    </style>
+</head>
+<body>
+
+<div id="app" class="container">
+    <!-- 头部：标题 + 状态指示灯 -->
+    <div class="header">
+        <h2>实时数据监控 (自动刷新)</h2>
+        <div class="status-badge">
+            <span class="dot" :class="statusClass"></span>
+            <span>{{ statusText }}</span>
+            <span v-if="lastUpdated" style="margin-left: 5px; font-size: 10px; color: #999;">
+                上次更新: {{ lastUpdated }}
+            </span>
+        </div>
+    </div>
+
+    <!-- 状态显示 (加载/错误) -->
+    <div v-if="initialLoading" class="status-msg loading">
+        <div>正在初始化图表...</div>
+    </div>
+
+    <div v-else-if="errorMsg" class="status-msg error">
+        <div>{{ errorMsg }}</div>
+        <div style="font-size: 12px; color: #666; margin-top: 10px;">
+            请检查后端是否启动 (http://127.0.0.1:5000/data) 及 CORS 配置。
+        </div>
+    </div>
+
+    <!-- 图表区域：2 行 2 列（左：buy_ratio + zb；右：前 10 表格） -->
+    <div v-show="!initialLoading && !errorMsg" class="charts-grid">
+        <div class="chart-block grid-left-top">
+            <h3>累计买盘 / 卖盘比 (buy_ratio)</h3>
+            <div id="chart-container"></div>
+        </div>
+
+        <div class="chart-block grid-left-bottom">
+            <h3>占比 zb（成交量占比）</h3>
+            <div id="chart-container-zb"></div>
+        </div>
+
+        <div class="top10-wrap grid-right-table">
+            <h3>buy_ratio 前 10（按最后一根分钟）</h3>
+            <table class="top10-table" v-if="topTenRows.length">
+                <thead>
+                    <tr>
+                        <th>排名</th>
+                        <th>股票</th>
+                        <th class="num">胜率</th>
+                        <th class="num">大单流入</th>
+                        <th class="num">小单流入</th>
+                        <th class="num">buy_ratio（最大）</th>
+                        <th class="num">zb（最大）</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr v-for="(row, idx) in topTenRows" :key="row.name">
+                        <td>{{ idx + 1 }}</td>
+                        <td>{{ row.name }}</td>
+                        <td class="num">{{ row.win_rate}}({{row.win_cnt}}/{{row.cnt}})</td>
+                        <td class="num">{{ row.big}}</td>
+                        <td class="num">{{ row.smal}}</td>
+                        <td class="num">{{ row.buy_ratio.toFixed(2) }}</td>
+                        <td class="num">
+                            {{ row.zb === null || row.zb === undefined ? '-' : row.zb.toFixed(5) }}
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+            <p v-else style="font-size: 13px; color: #888;">暂无数据</p>
+        </div>
+    </div>
+
+    <!-- 控制按钮 -->
+    <div class="controls" v-show="!initialLoading">
+        <button @click="toggleAutoRefresh" :disabled="isFetching">
+            {{ autoRefresh ? '暂停自动刷新' : '开启自动刷新' }}
+        </button>
+        <button @click="fetchData" class="secondary" :disabled="isFetching || autoRefresh">
+            手动刷新
+        </button>
+        <span style="font-size: 12px; color: #666; align-self: center; margin-left: 10px;">
+            刷新间隔: {{ intervalMs / 1000 }}秒
+        </span>
+    </div>
+</div>
+
+<script>
+    const { createApp, ref, onMounted, onBeforeUnmount, computed, nextTick } = Vue;
+
+    createApp({
+        setup() {
+            // 配置
+            const API_URL = 'http://127.0.0.1:5000/data';
+            const intervalMs = 10000; // 自动刷新间隔：5000ms = 5秒
+
+            // 状态变量
+            const initialLoading = ref(true);
+            const isFetching = ref(false);
+            const errorMsg = ref('');
+            const autoRefresh = ref(true); // 默认开启自动刷新
+            const lastUpdated = ref('');
+            const topTenRows = ref([]);
+            
+            let chartInstance = null;
+            let chartZbInstance = null;
+            let timer = null;
+
+            // 计算属性：状态指示灯样式
+            const statusClass = computed(() => {
+                if (isFetching.value) return 'loading';
+                if (errorMsg.value) return 'error';
+                return 'active';
+            });
+
+            // 计算属性：状态文字
+            const statusText = computed(() => {
+                if (isFetching.value) return '获取数据中...';
+                if (errorMsg.value) return '连接失败';
+                return autoRefresh.value ? '实时监控中' : '已暂停';
+            });
+
+            // 初始化 ECharts（buy_ratio + zb 双图）
+            const initCharts = () => {
+                const dom = document.getElementById('chart-container');
+                const domZb = document.getElementById('chart-container-zb');
+                if (!dom || !domZb) return;
+
+                if (chartInstance) chartInstance.dispose();
+                if (chartZbInstance) chartZbInstance.dispose();
+
+                chartInstance = echarts.init(dom);
+                chartZbInstance = echarts.init(domZb);
+
+                const resizeBoth = () => {
+                    if (chartInstance) chartInstance.resize();
+                    if (chartZbInstance) chartZbInstance.resize();
+                };
+                const ro = new ResizeObserver(resizeBoth);
+                ro.observe(dom);
+                ro.observe(domZb);
+            };
+
+            // 数据：[mintue, buy_ratio, zb]
+            const processApiData = (apiResponse) => {
+                if (!Array.isArray(apiResponse) || apiResponse.length === 0) {
+                    throw new Error("数据为空或格式错误");
+                }
+
+                const seriesBuy = [];
+                const seriesZb = [];
+                let xAxisData = [];
+                let isXAxisSet = false;
+
+                apiResponse.forEach((item, index) => {
+                    const name = item.name || `系列 ${index + 1}`;
+                    const rawData = item.data || [];
+                    if (!Array.isArray(rawData) || rawData.length === 0) return;
+
+                    const currentX = rawData.map(p => p[0]);
+                    const currentYBuy = rawData.map(p => p[1]);
+                    const currentYZb = rawData.map(p => (p.length > 2 ? p[2] : null));
+
+                    if (!isXAxisSet) {
+                        xAxisData = currentX;
+                        isXAxisSet = true;
+                    }
+
+                    const baseSeries = {
+                        name,
+                        type: 'line',
+                        smooth: true,
+                        symbol: 'circle',
+                        symbolSize: 6,
+                        lineStyle: { width: 2 },
+                        areaStyle: { opacity: 0.15 },
+                        animationDuration: 800,
+                        animationEasing: 'cubicOut'
+                    };
+                    seriesBuy.push({ ...baseSeries, data: currentYBuy });
+                    seriesZb.push({ ...baseSeries, data: currentYZb });
+                });
+
+                return { xAxisData, seriesBuy, seriesZb };
+            };
+
+            // 根据每只股票日内最后一根分钟的 buy_ratio / zb 排序，取前 10
+            const computeTopTenByMaxBuyRatio = (apiResponse) => {
+                if (!Array.isArray(apiResponse)) return [];
+                const rows = [];
+                apiResponse.forEach((item) => {
+                    const name = item.name || '';
+                    const raw = item.data || [];
+                    if (!raw.length) return;
+
+                    const lastPoint = raw[raw.length - 1] || [];
+                    const lastBuy = Number(lastPoint[1]);
+                    const lastZb = raw[raw.length - 1].length > 2 ? Number(lastPoint[2]) : null;
+                    const winRate = lastPoint.length > 3 ? Number(lastPoint[3]) : null; // ⭐
+                    const winCnt=Number(lastPoint[5]);
+                    const Cnt=Number(lastPoint[4]);
+                    const big=Number(lastPoint[6]);
+                    const smal=Number(lastPoint[7]);
+
+                    if (Number.isNaN(lastBuy)) return;
+                    const roundedBuy = Math.round(lastBuy * 100) / 100;
+                    const roundedZb = lastZb === null || Number.isNaN(lastZb) ? null : Math.round(lastZb * 100000) / 100000;
+                    const roundedWinRate =winRate === null || Number.isNaN(winRate) ? null : Math.round(winRate * 1000) / 1000;
+                    
+                    
+                    
+                    
+                    rows.push({
+                        name,
+                        buy_ratio: roundedBuy,
+                        zb: roundedZb,
+                        win_rate: winRate,
+                        win_cnt:winCnt,
+                        cnt:Cnt,
+                        big:big,
+                        smal:smal
+                    });
+                });
+
+                rows.sort((a, b) => b.buy_ratio - a.buy_ratio);
+                return rows.slice(0, 10);
+            };
+
+            const buildLineOption = (xAxisData, seriesList, yAxisName) => ({
+                tooltip: {
+                    trigger: 'axis',
+                    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                    borderColor: '#eee',
+                    borderWidth: 1,
+                    textStyle: { color: '#333' }
+                },
+                legend: {
+                    data: seriesList.map(s => s.name),
+                    bottom: 0,
+                    textStyle: { fontSize: 11 },
+                    type: 'scroll'
+                },
+                grid: {
+                    left: '3%', right: '3%', top: '10%', bottom: '18%',
+                    containLabel: true
+                },
+                xAxis: {
+                    type: 'category',
+                    boundaryGap: false,
+                    data: xAxisData,
+                    name: '分钟',
+                    axisLine: { lineStyle: { color: '#ddd' } },
+                    axisLabel: { rotate: 45, interval: 'auto', fontSize: 10 }
+                },
+                yAxis: {
+                    type: 'value',
+                    name: yAxisName,
+                    splitLine: { lineStyle: { type: 'dashed', color: '#eee' } },
+                    axisLabel: { fontSize: 11 }
+                },
+                series: seriesList
+            });
+
+            const updateChartOptions = (xAxisData, seriesBuy, seriesZb) => {
+                if (chartInstance && seriesBuy.length) {
+                    chartInstance.setOption(buildLineOption(xAxisData, seriesBuy, 'buy_ratio'), { notMerge: true });
+                }
+                if (chartZbInstance && seriesZb.length) {
+                    chartZbInstance.setOption(buildLineOption(xAxisData, seriesZb, 'zb'), { notMerge: true });
+                }
+            };
+
+            // 核心：获取数据函数
+            const fetchData = async () => {
+                if (isFetching.value) return;
+                
+                isFetching.value = true;
+                // 如果是第一次加载，保留 initialLoading，否则清除错误
+                if (!initialLoading.value) errorMsg.value = ''; 
+
+                try {
+                    const response = await axios.get(API_URL, { timeout: 5000 });
+                    
+                    // 确保 DOM 就绪
+                    if (initialLoading.value) {
+                        await nextTick();
+                        initCharts();
+                    }
+
+                    const { xAxisData, seriesBuy, seriesZb } = processApiData(response.data);
+                    
+                    if (seriesBuy.length === 0) throw new Error("无有效数据系列");
+
+                    topTenRows.value = computeTopTenByMaxBuyRatio(response.data);
+                    updateChartOptions(xAxisData, seriesBuy, seriesZb);
+
+                    // 更新成功状态
+                    const now = new Date();
+                    lastUpdated.value = `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}:${now.getSeconds().toString().padStart(2,'0')}`;
+                    initialLoading.value = false;
+
+                } catch (err) {
+                    console.error(err);
+                    initialLoading.value = false;
+                    
+                    if (err.code === 'ERR_NETWORK' || err.message.includes('Network Error')) {
+                        errorMsg.value = "无法连接到服务器 (CORS 错误或后端未启动)";
+                    } else {
+                        errorMsg.value = `数据错误: ${err.message}`;
+                    }
+                    
+                    // 如果连续失败，可以选择暂停自动刷新，这里选择继续尝试但记录错误
+                    // autoRefresh.value = false; 
+                } finally {
+                    isFetching.value = false;
+                }
+            };
+
+            // 定时器管理
+            const startTimer = () => {
+                if (timer) clearInterval(timer);
+                timer = setInterval(() => {
+                    if (autoRefresh.value) {
+                        fetchData();
+                    }
+                }, intervalMs);
+            };
+
+            const toggleAutoRefresh = () => {
+                autoRefresh.value = !autoRefresh.value;
+                if (autoRefresh.value) {
+                    fetchData(); // 开启时立即刷新一次
+                }
+            };
+
+            // 生命周期钩子
+            onMounted(() => {
+                fetchData(); // 首次加载
+                startTimer(); // 启动定时器
+            });
+
+            onBeforeUnmount(() => {
+                if (timer) clearInterval(timer);
+                if (chartInstance) chartInstance.dispose();
+                if (chartZbInstance) chartZbInstance.dispose();
+            });
+
+            return {
+                initialLoading,
+                isFetching,
+                errorMsg,
+                autoRefresh,
+                lastUpdated,
+                topTenRows,
+                statusClass,
+                statusText,
+                intervalMs,
+                fetchData,
+                toggleAutoRefresh
+            };
+        }
+    }).mount('#app');
+</script>
+
+</body>
+</html>
