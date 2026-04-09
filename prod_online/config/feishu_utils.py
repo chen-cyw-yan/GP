@@ -9,6 +9,8 @@ import os
 import lark_oapi as lark
 from lark_oapi.api.im.v1 import *
 
+from lark_oapi.api.bitable.v1 import *
+
 class FeishuUtils:  # 【建议】类名首字母大写，符合 Python 规范
     def __init__(self, app_id, app_secret):
         self.app_id = app_id
@@ -148,7 +150,42 @@ class FeishuUtils:  # 【建议】类名首字母大写，符合 Python 规范
                 return 'send file error!!'
 
             return 'send file success!!'
+    def insert_table_record(self,app_token='FFewwkxf2izEVxkyA7Yc821GnXe',table_id='tbliSMaFdxeKSM8y',line={'名称': '水晶光电', '代码': 'sz002273', '是否异动类型': '3日涨跌幅异常(21.02%)', '下一日可能触发': 'True', '目标等级': '5日异动', '预警信息': '明日若涨 7.25% 将触发5日异动', '收盘价': 30.11, '触发信号次数': 1, '所需最小涨幅': 0.07246761873131846, '日期': 1775692800000}):
+        # line={
+        #                 "代码": "sz003042",
+        #                 "名称": "中农联合",
+        #                 "触发日期": 1775723162000,
+        #                 "收盘价": 5.8,
+        #                 "触动次数":1,
+        #                 "异动类型":'',
+        #                 "触及所需涨幅":0.1,
+        #                 "预警详情":"xxx",
+        #                 "计划":'',
+        #                 "行业板块":"xx",
+        #                 "概念板块":"xx",
+        #                 "板块共振得分":0.1
+        #             }
+        # 创建客户端
+        request: CreateAppTableRecordRequest = CreateAppTableRecordRequest.builder() \
+                .app_token(app_token) \
+                .table_id(table_id) \
+                .user_id_type("open_id") \
+                .request_body(AppTableRecord.builder()
+                    .fields(line)
+                    .build()) \
+                .build()
 
+            # 发起请求
+        response: CreateAppTableRecordResponse = self.client.bitable.v1.app_table_record.create(request)
+
+            # 处理失败返回
+        if not response.success():
+            lark.logger.error(
+                f"client.bitable.v1.app_table_record.create failed, code: {response.code}, msg: {response.msg}, log_id: {response.get_log_id()}, resp: \n{json.dumps(json.loads(response.raw.content), indent=4, ensure_ascii=False)}")
+            return False
+        return True
+            # 处理业务结果
+        # lark.logger.info(lark.JSON.marshal(response.data, indent=4))
 
 
 if __name__ == '__main__':

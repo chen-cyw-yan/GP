@@ -204,7 +204,7 @@ def extract_top_blocks_vectorized(df_relx: pd.DataFrame, df_detail: pd.DataFrame
         results.append(df_hy[['stock_code', 'industry_block']])
     
     # --- 概念板块 (Rank<=2, 拼接) ---
-    mask_gn = (df_sorted['block_type'] == '概念板块') & (df_sorted['rank'] <= 2)
+    mask_gn = (df_sorted['block_type'] == '概念板块') & (df_sorted['rank'] <= 3)
     if mask_gn.any():
         df_gn_raw = df_sorted.loc[mask_gn, ['stock_code', 'name', 'strength']].copy()
         df_gn_raw['item'] = df_gn_raw.apply(lambda x: f"{x['name']}({x['strength']:.2f})", axis=1)

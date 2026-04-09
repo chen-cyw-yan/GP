@@ -1,6 +1,6 @@
 import logging
 import fetch_stock_data_for_multithread as fetch_stock
-import stock_selector_for_myself as selector
+import prod_online.script.stock_selector_at_home as selector
 import stock_deep_report as deep_report
 import block_analysis
 import get_now_stock_data as now_stock
@@ -26,7 +26,7 @@ def main():
     block_analysis.main()
 
     logger.info("="*30 + " 开始执行本日大小单阈值分析任务 " + "="*30)
-    threshold.main()
+    # threshold.main()
 
 
     logger.info("="*30 + " 开始执行股票深度分析任务 " + "="*30)
