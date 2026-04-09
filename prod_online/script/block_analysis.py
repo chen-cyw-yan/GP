@@ -297,6 +297,78 @@ def save_to_db_and_notify(df_final: pd.DataFrame, engine, conn):
             
     except Exception as e:
         logger.error(f"Excel 生成或飞书通知失败: {e}")
+def add_into_fs_table(df_to_fs_wiki,last_date,engine):
+    code_list_str='","'.join(df_to_fs_wiki['stock_code'].to_list())
+    print(code_list_str)
+    sqls=f"""
+        select date,code,`close` from gp.stock where `date`='{last_date}' and code in ("{code_list_str}")
+    """
+    today_stock=pd.read_sql(sql=sqls,con=engine)
+    df_to_fs_wiki=pd.merge(df_to_fs_wiki,today_stock,how='inner',left_on=['stock_code','trade_date'],right_on=['code','date'])
+    df_to_fs_wiki=df_to_fs_wiki[['stock_code',
+        'stock_name',
+        'trigger_count',
+        'is_abnormal_type',
+        'warning_info',
+        'concept_block_resonance',
+        'trade_date',
+        'industry_block',
+        'concept_block',
+        'close']]
+    cols={'stock_code':'代码',
+        'stock_name':'名称',
+        'trigger_count':'触动次数',
+        'is_abnormal_type':'异动类型',
+        'warning_info':'预警详情',
+        'concept_block_resonance':'板块共振得分',
+        'trade_date':'触发日期',
+        'industry_block':'行业板块',
+        'concept_block':'概念板块',
+        'close':'收盘价'
+    }
+    df_to_fs_wiki=df_to_fs_wiki.rename(columns=cols)
+    print(df_to_fs_wiki)
+    fs_client = FeishuUtils(FEISHU_APP_ID, FEISHU_APP_SECRET)
+    for index, row in df_to_fs_wiki.iterrows():
+        # 1. 处理日期 -> 毫秒时间戳
+        # 先确保是 datetime 对象，再转时间戳 * 1000
+        date_val = row['触发日期']
+        if isinstance(date_val, str):
+            # 如果是字符串，先转 datetime
+            date_obj = pd.to_datetime(date_val)
+        else:
+            date_obj = date_val
+        
+        # 转换为毫秒时间戳 (int)
+        timestamp_ms = int(time.mktime(date_obj.timetuple()) * 1000)
+
+        # 2. 构建字典
+        dt = {
+            # --- 转为字符串 (str) ---
+            "名称": str(row['名称']) if pd.notna(row['名称']) else "",
+            "代码": str(row['代码']) if pd.notna(row['代码']) else "",
+            "异动类型": str(row['异动类型']) if pd.notna(row['异动类型']) else "",
+            "行业板块": str(row['行业板块']) if pd.notna(row['行业板块']) else "",
+            "概念板块": str(row['概念板块']) if pd.notna(row['概念板块']) else "",
+            "预警详情": str(row['预警详情']) if pd.notna(row['预警详情']) else "",
+            
+            # --- 转为数字 (int/float) ---
+            # 使用 pd.to_numeric 可以安全地将字符串或数字转为数值类型，errors='coerce' 会将无法转换的变为 NaN
+            "收盘价": pd.to_numeric(row['收盘价'], errors='coerce'),
+            "触动次数": pd.to_numeric(row['触动次数'], errors='coerce'),
+            "板块共振得分": pd.to_numeric(row['板块共振得分'], errors='coerce'),
+            # --- 日期戳 ---
+            "触发日期": timestamp_ms
+        }
+        # print(dt)
+        # exit(0)
+        # 可选：将数字类型的 NaN 填充为 0，防止后续 JSON 序列化报错
+        dt["收盘价"] = 0 if pd.isna(dt["收盘价"]) else dt["收盘价"]
+        dt["触动次数"] = 0 if pd.isna(dt["触动次数"]) else dt["触动次数"]
+        dt["板块共振得分"] = 0 if pd.isna(dt["板块共振得分"]) else dt["板块共振得分"]
+        rs=fs_client.insert_table_record(app_token='FFewwkxf2izEVxkyA7Yc821GnXe',table_id='tbliSMaFdxeKSM8y',line=dt)
+        logging.info(f'插入飞书文档结果：{rs}！！')
+    # print(1)
 
 # ==============================
 # 主流程
@@ -359,7 +431,12 @@ def main():
                 df_analy[col] = df_analy[col].fillna("")
             else:
                 df_analy[col] = ""
-
+        # print(df_analy.columns)
+        last_day=max(df_analy['trade_date'].dropna().to_list())
+        # print(last_day)
+        df_to_fs_wiki=df_analy.loc[df_analy['trade_date']==last_day]
+        # print(df_to_fs_wiki)
+        add_into_fs_table(df_to_fs_wiki,last_date=last_day,engine=engine)
         # 5. 整理最终列
         final_columns = [
             'stock_code', 'stock_name', 'need_to_analysis', 'trigger_count', 'is_abnormal_type', 'warning_info',
