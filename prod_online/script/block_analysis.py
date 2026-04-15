@@ -211,9 +211,16 @@ def extract_top_blocks_vectorized(df_relx: pd.DataFrame, df_detail: pd.DataFrame
         df_gn = df_gn_raw.groupby('stock_code')['item'].apply(lambda x: "，".join(x)).reset_index()
         df_gn.rename(columns={'item': 'concept_block'}, inplace=True)
         results.append(df_gn[['stock_code', 'concept_block']])
+
+    if mask_gn.any():
+        df_gn_raw = df_sorted.loc[mask_gn, ['stock_code', 'name', 'strength']].copy()
+        df_gn_raw['item'] = df_gn_raw.apply(lambda x: f"{x['name']}", axis=1)
+        df_gn = df_gn_raw.groupby('stock_code')['item'].apply(lambda x: "，".join(x)).reset_index()
+        df_gn.rename(columns={'item': 'concept_block_not_score'}, inplace=True)
+        results.append(df_gn[['stock_code', 'concept_block_not_score']])
     
     if not results:
-        return pd.DataFrame(columns=['stock_code', 'region_block', 'industry_block', 'concept_block'])
+        return pd.DataFrame(columns=['stock_code', 'region_block', 'industry_block', 'concept_block','concept_block_not_score'])
     
     # 合并所有结果
     df_final = results[0]
@@ -313,7 +320,7 @@ def add_into_fs_table(df_to_fs_wiki,last_date,engine):
         'concept_block_resonance',
         'trade_date',
         'industry_block',
-        'concept_block','resonance_score',
+        'concept_block','resonance_score','concept_block_not_score',
         'close']]
     cols={'stock_code':'代码',
         'stock_name':'名称',
@@ -324,7 +331,8 @@ def add_into_fs_table(df_to_fs_wiki,last_date,engine):
         'trade_date':'触发日期',
         'industry_block':'行业板块',
         'concept_block':'概念板块',
-        'close':'收盘价'
+        'close':'收盘价',
+        'concept_block_not_score':'概念板块(未计算)'
     }
     df_to_fs_wiki=df_to_fs_wiki.rename(columns=cols)
     print(df_to_fs_wiki)
@@ -351,6 +359,7 @@ def add_into_fs_table(df_to_fs_wiki,last_date,engine):
             "行业板块": str(row['行业板块']) if pd.notna(row['行业板块']) else "",
             "概念板块": str(row['概念板块']) if pd.notna(row['概念板块']) else "",
             "预警详情": str(row['预警详情']) if pd.notna(row['预警详情']) else "",
+            '概念板块(未计算)': str(row['概念板块(未计算)']) if pd.notna(row['概念板块(未计算)']) else "",
             
             # --- 转为数字 (int/float) ---
             # 使用 pd.to_numeric 可以安全地将字符串或数字转为数值类型，errors='coerce' 会将无法转换的变为 NaN
@@ -363,6 +372,7 @@ def add_into_fs_table(df_to_fs_wiki,last_date,engine):
         # print(dt)
         # exit(0)
         # 可选：将数字类型的 NaN 填充为 0，防止后续 JSON 序列化报错
+        dt['概念板块(未计算)']=dt['概念板块(未计算)'].split('，')
         dt["收盘价"] = 0 if pd.isna(dt["收盘价"]) else dt["收盘价"]
         dt["触动次数"] = 0 if pd.isna(dt["触动次数"]) else dt["触动次数"]
         dt["板块共振得分"] = 0 if pd.isna(dt["板块共振得分"]) else dt["板块共振得分"]

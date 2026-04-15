@@ -166,7 +166,7 @@ def clean_value(val):
 def process_xls_files(data_dir):
     conn = connect_db()
     cursor = conn.cursor()
-    
+    print(data_dir)
     try:
         for file_path in Path(data_dir).glob("板块指数*.xls"):
             print(f"\n📁 处理文件: {file_path.name}")
