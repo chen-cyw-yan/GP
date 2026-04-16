@@ -30,7 +30,7 @@ def main():
 
 
     logger.info("="*30 + " 开始执行股票深度分析任务 " + "="*30)
-    deep_report.main()
+    # deep_report.main()
     logger.info("="*30 + " 执行完成 " + "="*30)
 if __name__ == '__main__':
     main()

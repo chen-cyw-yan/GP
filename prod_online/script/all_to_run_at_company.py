@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 def main():
     logger.info("="*30 + " 开始更新日线数据任务 " + "="*30)
     # fetch_stock.main()
-    now_stock.main()
+    # now_stock.main()
     
     logger.info("="*30 + " 开始更新板块日线数据任务 " + "="*30)
 
@@ -28,7 +28,7 @@ def main():
     selector.main()
 
     # logger.info("="*30 + " 开始执行板块分析任务 " + "="*30)
-    # block_analysis.main()
+    block_analysis.main()
 
     logger.info("="*30 + " 开始执行本日大小单阈值分析任务 " + "="*30)
     threshold.main()
