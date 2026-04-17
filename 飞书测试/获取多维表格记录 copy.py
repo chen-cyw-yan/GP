@@ -29,7 +29,7 @@ def main():
                 "conditions": [
                     {
                         "field_name": "触发日期",   # 时间列
-                        "operator": "isGreaterEqual",  # >=
+                        "operator": "is",  # >=
                         "value": ["ExactDate",'1776355200000']
                     },
                     {
