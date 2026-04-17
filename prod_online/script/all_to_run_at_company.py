@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 def main():
     logger.info("="*30 + " 开始更新日线数据任务 " + "="*30)
     # fetch_stock.main()
-    # now_stock.main()
+    now_stock.main()
     
     logger.info("="*30 + " 开始更新板块日线数据任务 " + "="*30)
 

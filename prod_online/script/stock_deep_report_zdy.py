@@ -722,9 +722,6 @@ def main():
         "stock_code": "sh600480",
         "stock_name": "凌云股份"
     },{
-        "stock_code": "sz002080",
-        "stock_name": "中材科技"
-    },{
         "stock_code": "sh603626",
         "stock_name": "科森科技"
     }])

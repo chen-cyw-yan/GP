@@ -264,14 +264,15 @@ where need_to_analysis=1""",
                 (df_rate['buy_ratio'] >= last_ratio) &
                 (df_rate['zb'] >= last_zb)
             ]
-
+            all_cnt=0
+            win_cnt=0
             if df_one_rate.empty:
                 win_rate = None
             else:
                 win_rate = round((df_one_rate['mrzf_and_next_sum'] > 0).mean(), 2)
                 all_cnt=(df_one_rate['mrzf_and_next_sum']).count()
                 win_cnt=(df_one_rate['mrzf_and_next_sum'] > 0).sum()
-            print(all_cnt,win_cnt)
+            # print(all_cnt,win_cnt)
             # ⭐ 给整列赋值（不是只一行）
             tmp_by_stock[name]['win_rate'] = win_rate
             tmp_by_stock[name]['cnt'] = all_cnt
