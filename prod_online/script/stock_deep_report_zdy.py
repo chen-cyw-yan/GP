@@ -744,8 +744,8 @@ def main():
             print(f"数据获取失败：{e}")
             exit()
 
-        density_img_path= "prod_online/imges/temp_image.png"
-        fundflow_img_path= "prod_online/imges/fundflow_img.png"
+        density_img_path= f"prod_online/imges/deep_img/{stock_name}_temp_image.png"
+        fundflow_img_path= f"prod_online/imges/deep_img/{stock_name}_fundflow_img.png"
         save_paths={
             "density_img_path":density_img_path,
             "fundflow_img_path":fundflow_img_path
@@ -759,7 +759,7 @@ def main():
         if density_img: images_to_send.append(density_img)
         if fundflow_img: images_to_send.append(fundflow_img)
         
-        send_telegram_message_with_images(TG_TOKEN, TG_CHAT_ID, report_text, images_to_send, proxy_url=PROXY_URL)
+        # send_telegram_message_with_images(TG_TOKEN, TG_CHAT_ID, report_text, images_to_send, proxy_url=PROXY_URL)
         
         
 
@@ -773,7 +773,12 @@ def main():
                                             density_img_path)
         fs_client.set_message_for_image('chat_id', 'oc_dca02b55253dc48c8d9ce03e1b16e261',
                                             fundflow_img_path)
-        # fs_client.set_message_for_file('chat_id', 'oc_cd642a7fec1dcd847e91b2e1775809d2',excel_path,'result.xlsx')
+        
+        
+        
+
+
+
 
 
 if __name__ == "__main__":

@@ -5,6 +5,7 @@ import stock_deep_report as deep_report
 import block_analysis
 import get_now_stock_data as now_stock
 import fetch_threshold as threshold
+import import_tdx_block_detail as bk_detail
 # ==============================
 # 日志配置
 # ==============================
@@ -18,6 +19,9 @@ def main():
     logger.info("="*30 + " 开始更新日线数据任务 " + "="*30)
     # fetch_stock.main()
     now_stock.main()
+
+    bk_detail.process_xls_files(r"E:\new_tdx\T0002\export\block_data")
+
     
     logger.info("="*30 + " 开始计算选股策列任务 " + "="*30)
     selector.main()

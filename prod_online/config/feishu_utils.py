@@ -8,6 +8,8 @@ import uuid
 import os
 import lark_oapi as lark
 from lark_oapi.api.im.v1 import *
+from lark_oapi.api.drive.v1 import *
+import os
 
 from lark_oapi.api.bitable.v1 import *
 
@@ -186,6 +188,97 @@ class FeishuUtils:  # 【建议】类名首字母大写，符合 Python 规范
         return True
             # 处理业务结果
         # lark.logger.info(lark.JSON.marshal(response.data, indent=4))
+    
+    def get_TableRecord(self,app_token='FFewwkxf2izEVxkyA7Yc821GnXe',table_id='tbliSMaFdxeKSM8y',view_id='vewMxw9kIo',field_names=["触发日期", "代码",'附件'],filter={
+                "conjunction": "and",
+                "conditions": [
+                    {
+                        "field_name": "触发日期",   # 时间列
+                        "operator": "is",  # >=
+                        "value": ["ExactDate",'1776355200000']
+                    },
+                    {
+                        "field_name": "代码",   # 单选列
+                        "operator": "is",
+                        "value": ["sh600552"]                    }
+                ]
+            },page_size=100):
+        request: SearchAppTableRecordRequest = SearchAppTableRecordRequest.builder() \
+        .app_token(app_token) \
+        .table_id(table_id) \
+        .page_size(page_size) \
+        .request_body(
+            SearchAppTableRecordRequestBody.builder()
+            .view_id(view_id)
+            .field_names(field_names)
+            .filter(filter)
+            .build()
+        ) \
+        .build()
+
+        # 发起请求
+        response: SearchAppTableRecordResponse = self.client.bitable.v1.app_table_record.search(request)
+
+        # 处理失败返回
+        if not response.success():
+            lark.logger.error(
+                f"client.bitable.v1.app_table_record.search failed, code: {response.code}, msg: {response.msg}, log_id: {response.get_log_id()}, resp: \n{json.dumps(json.loads(response.raw.content), indent=4, ensure_ascii=False)}")
+            return
+
+        # 处理业务结果
+        lark.logger.info(lark.JSON.marshal(response.data, indent=4))
+        return response  
+    
+    def upload_AllMedia(self,file_path,file_name,parent_type='bitable_image',parent_node='AYw3buqaVaGuv1sLtI8chGJLn0v'):
+        # file_path=r"E:\stock\GP\当日策列\static\test.png"
+        file = open(file_path, "rb")
+        request: UploadAllMediaRequest = UploadAllMediaRequest.builder() \
+            .request_body(UploadAllMediaRequestBody.builder()
+                .file_name(file_name)
+                .parent_type(parent_type)
+                .size(str(os.path.getsize(file_path)))
+                .parent_node(parent_node)
+                .file(file)
+                .build()) \
+            .build()
+
+        # 发起请求
+        response: UploadAllMediaResponse = self.client.drive.v1.media.upload_all(request)
+
+        # 处理失败返回
+        if not response.success():
+            lark.logger.error(
+                f"client.drive.v1.media.upload_all failed, code: {response.code}, msg: {response.msg}, log_id: {response.get_log_id()}, resp: \n{json.dumps(json.loads(response.raw.content), indent=4, ensure_ascii=False)}")
+            return
+
+        # 处理业务结果
+        lark.logger.info(lark.JSON.marshal(response.data, indent=4))
+        return response
+    
+    def update_TableRecord(self,app_token='FFewwkxf2izEVxkyA7Yc821GnXe',table_id='tbliSMaFdxeKSM8y',record_id='recvh3BO6ThwK9',fields={"附件":[{"file_token":"V84nbWyvEoL0DYxh1REcq9Nunqc"}]}):
+
+        request: UpdateAppTableRecordRequest = UpdateAppTableRecordRequest.builder() \
+        .app_token(app_token) \
+        .table_id(table_id) \
+        .record_id(record_id) \
+        .request_body(AppTableRecord.builder()
+            .fields(fields)
+            .build()) \
+        .build()
+
+        # 发起请求
+        option = lark.RequestOption.builder().user_access_token("u-fi6731_3x5PpttR2Wtv47w15jczx0loXp8EamMo02CCH").build()
+        response: UpdateAppTableRecordResponse = self.client.bitable.v1.app_table_record.update(request, option)
+
+        # 处理失败返回
+        if not response.success():
+            lark.logger.error(
+                f"client.bitable.v1.app_table_record.update failed, code: {response.code}, msg: {response.msg}, log_id: {response.get_log_id()}, resp: \n{json.dumps(json.loads(response.raw.content), indent=4, ensure_ascii=False)}")
+            return
+
+        # 处理业务结果
+        lark.logger.info(lark.JSON.marshal(response.data, indent=4))
+
 
 
 if __name__ == '__main__':
@@ -208,12 +301,40 @@ if __name__ == '__main__':
     # else:
     #     print(f"测试文件不存在: {img_path}")
 
-    # 测试文件
-    file_path = r"C:\Users\cyw\Desktop\jupyternotebook\git-python\GP\prod_online\script\result.xlsx"
+    # # 测试文件
+    # file_path = r"C:\Users\cyw\Desktop\jupyternotebook\git-python\GP\prod_online\script\result.xlsx"
     
-    # 检查文件是否存在再运行，避免报错
-    if os.path.exists(file_path):
-        res = fs_client.set_message_for_file('chat_id', 'oc_cd642a7fec1dcd847e91b2e1775809d2', file_path,'result.xlsx')
-        print(res)
-    else:
-        print(f"测试文件不存在: {file_path}")
+    # # 检查文件是否存在再运行，避免报错
+    # if os.path.exists(file_path):
+    #     res = fs_client.set_message_for_file('chat_id', 'oc_cd642a7fec1dcd847e91b2e1775809d2', file_path,'result.xlsx')
+    #     print(res)
+    # else:
+    #     print(f"测试文件不存在: {file_path}")
+    app_token='FFewwkxf2izEVxkyA7Yc821GnXe'
+    table_id='tbliSMaFdxeKSM8y'
+    view_id='vewMxw9kIo'
+    field_names=["触发日期", "代码",'附件']
+    filter={
+                "conjunction": "and",
+                "conditions": [
+                    {
+                        "field_name": "触发日期",
+                        "operator": "is",
+                        "value": ["ExactDate",'1776355200000']
+                    },
+                    {
+                        "field_name": "代码",
+                        "operator": "is",
+                        "value": ["sh600552"]
+                    }
+                ]
+            }
+    page_size=100
+    parent_node='AYw3buqaVaGuv1sLtI8chGJLn0v'
+    record=fs_client.get_TableRecord(app_token=app_token,table_id=table_id,view_id=view_id,field_names=field_names,filter=filter,page_size=page_size)
+    rs=fs_client.upload_AllMedia(file_path='E:\stock\GP\prod_online\imges\deep_img\凯盛科技_temp_image.png',file_name=f'density_image.png',parent_type='bittable_image',parent_node=parent_node)
+    print(lark.JSON.marshal(record.data, indent=4))
+    record_id = record.data.items[0].record_id
+    print(record.data.items[0].fields.get('附件'))
+    print(record_id)
+

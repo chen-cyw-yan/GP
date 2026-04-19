@@ -23,7 +23,7 @@ def main():
         .request_body(
             SearchAppTableRecordRequestBody.builder()
             .view_id("vewMxw9kIo")
-            .field_names(["触发日期", "代码"])
+            .field_names(["触发日期", "代码",'附件'])
             .filter({
                 "conjunction": "and",
                 "conditions": [
@@ -53,7 +53,9 @@ def main():
 
     # 处理业务结果
     lark.logger.info(lark.JSON.marshal(response.data, indent=4))
+    return response
 
 
 if __name__ == "__main__":
-    main()
+    response=main()
+    print(response.data)

@@ -43,9 +43,9 @@ today_str = today_dt.strftime("%Y-%m-%d")
 # today_str ='2026-03-06'
 logger.info(f"当前任务日期: {today_str}")
 engine = create_engine("mysql+pymysql://root:chen@127.0.0.1:3306/gp")
-if not utils.is_trading_day_ak(today_str):
-    logger.warning(f"⚠️ {today_str} 不是 A 股交易日，程序安全退出。")
-    sys.exit(0)
+# if not utils.is_trading_day_ak(today_str):
+#     logger.warning(f"⚠️ {today_str} 不是 A 股交易日，程序安全退出。")
+#     sys.exit(0)
 # ================= 配置 Matplotlib 中文显示 =================
 def setup_matplotlib_font():
     """自动设置适合当前操作系统的中文字体"""
@@ -73,6 +73,29 @@ def setup_matplotlib_font():
         logger.warning(f"无法加载字体 {font_name}，中文可能无法显示。尝试使用默认字体。")
 
 setup_matplotlib_font()
+import shutil
+
+def clear_folder(folder_path):
+    # 检查文件夹是否存在
+    if not os.path.exists(folder_path):
+        print(f"文件夹不存在: {folder_path}")
+        return
+
+    # 遍历文件夹下的所有内容
+    for item in os.listdir(folder_path):
+        item_path = os.path.join(folder_path, item)
+        
+        try:
+            if os.path.isfile(item_path) or os.path.islink(item_path):
+                os.unlink(item_path)  # 删除文件或链接
+            elif os.path.isdir(item_path):
+                shutil.rmtree(item_path)  # 删除子文件夹及其内容
+        except Exception as e:
+            print(f'删除失败 {item_path}. 原因: {e}')
+
+# 使用示例
+folder_dir = 'prod_online\imges\deep_img'
+clear_folder(folder_dir)
 
 class FinalQuantAnalyzer:
     def __init__(self, df, stock_info,save_images_path):
@@ -84,10 +107,9 @@ class FinalQuantAnalyzer:
         code = stock_info.get('code', 'UNKNOWN')
         name = stock_info.get('name', '未知股票')
         
-        header = f"*🚀 A 股量化深度分析报告*\n"
-        header += f"# {name} ({code})\n"
-        header += f"`🕒 生成时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}`\n"
-        header += "\n"
+        header = f"🚀 A 股量化深度分析报告*\n"
+        header += f"{name} ({code})\n"
+        header += f"🕒 生成时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
         self.logs.append(header)
 
         if '成交时间' in self.df.columns:
@@ -176,12 +198,13 @@ class FinalQuantAnalyzer:
         }
 
     def analyze_period(self, name, start_time, end_time):
-        self._log(f"\n### 🕒 时段分析：{name}")
-        self._log(f"`⏱️ 区间：{start_time} - {end_time}`")
-        self._log("---")
+        self._log(f"===============================================")
+        self._log(f"🕒 时段分析：{name}")
+        self._log(f"⏱️ 区间：{start_time} - {end_time}")
+        self._log("")
         data = self._get_time_range(start_time, end_time)
         if data.empty:
-            self._log("> ⚠️ 该时段无数据")
+            self._log("⚠️ 该时段无数据")
             return
 
         buy_amt = data[data['type_code'] == 1]['成交金额'].sum()
@@ -189,18 +212,18 @@ class FinalQuantAnalyzer:
         net_flow = buy_amt - sell_amt
         ratio = buy_amt / sell_amt if sell_amt > 0 else np.inf
         
-        self._log(f"**💰 资金流向**")
-        self._log(f"- 净主动流：`{net_flow:,.0f}`")
-        self._log(f"- 买卖比率：`{ratio:.2f}`")
+        self._log(f"💰 资金流向")
+        self._log(f"净主动流：`{net_flow:,.0f}`")
+        self._log(f"买卖比率：`{ratio:.2f}`")
 
         l_buy = data[(data['is_large']) & (data['type_code']==1)]['成交金额'].sum()
         l_sell = data[(data['is_large']) & (data['type_code']==-1)]['成交金额'].sum()
         s_buy = data[(data['is_small']) & (data['type_code']==1)]['成交金额'].sum()
         s_sell = data[(data['is_small']) & (data['type_code']==-1)]['成交金额'].sum()
         
-        self._log(f"\n**📊 订单结构拆解**")
-        self._log(f"- 🐋 大单净流入：`{l_buy - l_sell:,.0f}`")
-        self._log(f"- 🐜 小单净流入：`{s_buy - s_sell:,.0f}`")
+        self._log(f"📊 订单结构拆解")
+        self._log(f"🐋 大单净流入：{l_buy - l_sell:,.0f}")
+        self._log(f"🐜 小单净流入：{s_buy - s_sell:,.0f}")
 
         support_score, support_msg = self.calculate_support_recovery_refined(data)
         if support_score == 1.0: desc = "极强 (完全收复)"
@@ -208,28 +231,28 @@ class FinalQuantAnalyzer:
         elif support_score >= 0.5: desc = "弱 (仅止跌)"
         else: desc = "极弱 (继续下跌)"
         
-        self._log(f"\n**🛡️ 承接力评分**")
-        self._log(f"- 得分：`{support_score:.1f}` ({support_msg})")
-        self._log(f"> 💡 评价：{desc}")
+        self._log(f"\n🛡️ 承接力评分")
+        self._log(f"得分：{support_score:.1f}({support_msg})")
+        self._log(f"💡 评价：{desc}")
 
         push_score, details = self.calculate_push_score_custom(data)
-        self._log(f"\n**🎯 推价有效性评分**")
-        self._log(f"- 总分：`{push_score:.2f} / 25.00`")
-        self._log(f"- 细节分析：")
-        self._log(f"  • 上涨成交量占比：`{details['push_ratio']:.1%}` (得分 `{details['direction_score']}/20`)")
-        self._log(f"  • 最长连续上涨：`{details['max_up_streak']}` 笔 (奖励 `{details['streak_bonus']}/5`)")
+        self._log(f"\n🎯 推价有效性评分")
+        self._log(f"总分：`{push_score:.2f} / 25.00`")
+        self._log(f"细节分析：")
+        self._log(f"• 上涨成交量占比：`{details['push_ratio']:.1%}` (得分 `{details['direction_score']}/20`)")
+        self._log(f"• 最长连续上涨：`{details['max_up_streak']}` 笔 (奖励 `{details['streak_bonus']}/5`)")
         
         if push_score >= 20: verdict = "✅ 极强推升 (量价齐升，趋势连贯)"
         elif push_score >= 15: verdict = "🟢 良性推升 (多头占优)"
         elif push_score >= 10: verdict = "⚖️ 震荡整理 (多空交织)"
         else: verdict = "🔴 弱势推升 (下跌放量或连续下跌)"
-        self._log(f"> 💡 结论：{verdict}")
+        self._log(f"💡 结论：{verdict}")
 
         o_p, c_p = data['成交价格'].iloc[0], data['成交价格'].iloc[-1]
         status_text = "📈 涨" if c_p > o_p else "📉 跌"
-        self._log(f"\n**📈 区间表现**")
-        self._log(f"- 状态：{status_text}")
-        self._log(f"- 价格：`{o_p:.2f}` → `{c_p:.2f}`")
+        self._log(f"\n📈 区间表现**")
+        self._log(f"状态：{status_text}")
+        self._log(f"价格：`{o_p:.2f}` → `{c_p:.2f}`")
     def detect_main_force_behavior(self):
         df = self.df.copy()
         if df.empty:
@@ -444,13 +467,12 @@ class FinalQuantAnalyzer:
         self.analyze_period("开盘后15分钟", "09:20:00", "09:45:00")
         self.analyze_period("收盘前15分钟", "14:45:00", "15:00:00")
         
-        self._log(f"\n---\n")
-        self._log("## 🌍 全天交易全景总览")
-        self._log("---")
+        self._log(f"===============================================")
+        self._log("🌍 全天交易全景总览")
         
         data = self.df
         if data.empty:
-            self._log("> ⚠️ 全天无数据")
+            self._log("⚠️ 全天无数据")
             return self.get_report(), None, None
 
         total_amt = data['成交金额'].sum()
@@ -461,50 +483,37 @@ class FinalQuantAnalyzer:
         all_s_net = data[(data['is_small']) & (data['type_code']==1)]['成交金额'].sum() - \
                     data[(data['is_small']) & (data['type_code']==-1)]['成交金额'].sum()
         
-        self._log(f"**📊 基础数据**")
-        self._log(f"- 总成交额：`{total_amt/10000:.1f}万`")
-        self._log(f"- 均价 (VWAP)：`{vwap:.2f}`")
+        self._log(f"📊 基础数据")
+        self._log(f"总成交额：`{total_amt/10000:.1f}万`")
+        self._log(f"均价 (VWAP)：`{vwap:.2f}`")
         
-        self._log(f"\n**🐋 主力动向**")
-        self._log(f"- 全天大单净额：`{all_l_net:,.0f}`")
-        self._log(f"- 全天小单净额：`{all_s_net:,.0f}`")
+        self._log(f"🐋 主力动向")
+        self._log(f"全天大单净额：`{all_l_net:,.0f}`")
+        self._log(f"全天小单净额：`{all_s_net:,.0f}`")
         
         sup_score, sup_msg = self.calculate_support_recovery_refined(data)
         push_score, details = self.calculate_push_score_custom(data)
         
-        self._log(f"\n**📈 核心评分汇总**")
-        self._log(f"- 🛡️ 全天承接力：`{sup_score:.1f}`")
-        self._log(f"- 🎯 全天推价有效性：`{push_score:.2f} / 25.00`")
-        self._log(f"  *(细节：上涨占比 `{details['push_ratio']:.1%}`, 连涨 `{details['max_up_streak']}` 笔)*")
+        self._log(f"📈 核心评分汇总")
+        self._log(f"🛡️ 全天承接力：`{sup_score:.1f}`")
+        self._log(f"🎯 全天推价有效性：`{push_score:.2f} / 25.00`")
+        self._log(f"(细节：上涨占比 `{details['push_ratio']:.1%}`, 连涨 `{details['max_up_streak']}` 笔)*")
         
 
-
-        action,details = self.detect_main_force_action()
-
-        self._log("\n**🎬 主力动作识别**")
-
-        self._log(f"- 动作判断：`{action}`")
-
-        self._log(f"- 主力净流：`{details['large_net']:,.0f}`")
-        self._log(f"- 散户净流：`{details['small_net']:,.0f}`")
-        self._log(f"- 主力参与度：`{details['large_ratio']:.1%}`")
-        self._log(f"- 推价评分：`{details['push_score']}`")
-        self._log(f"- 日内涨跌：`{details['price_change']:.2%}`")
-        
         behavior, details = self.detect_main_force_behavior()
-
-        self._log(f"\n**🧠 主力行为识别**")
-        self._log(f"- 行为判断：`{behavior}`")
-        self._log(f"- 大单净流：`{details['large_net']:,.0f}`")
-        self._log(f"- 小单净流：`{details['small_net']:,.0f}`")
-        self._log(f"- 主力参与度：`{details['large_ratio']:.1%}`")
-        self._log(f"- 日内涨跌：`{details['price_change']:.2%}`")
-
+        action,details = self.detect_main_force_action()
         strategy = self.detect_main_force_strategy()
-
-        self._log("\n**🎯 主力策略识别**")
+        self._log("\n🎬 主力动作识别")
+        
+        self._log(f"主力净流/大单净流：`{details['large_net']:,.0f}`")
+        self._log(f"散户净流/小单净流：`{details['small_net']:,.0f}`")
+    
+        self._log(f"主力参与度：`{details['large_ratio']:.1%}`")
+        self._log(f"推价评分：`{details['push_score']}`")
+        self._log(f"日内涨跌：`{details['price_change']:.2%}`")
+        self._log(f"动作判断：`{action}`")
+        self._log(f"行为判断：`{behavior}`")
         self._log(f"- 当前策略：`{strategy}`")
-
 
         conclusion = ""
         icon = ""
@@ -523,11 +532,8 @@ class FinalQuantAnalyzer:
         
 
 
-        self._log(f"\n---")
-        self._log(f"## {icon} 综合研判结论")
-        self._log("---")
-        self._log(f">>> **{conclusion}**")
-        
+        self._log(f"\n")
+        self._log(f"{icon} 综合研判结论：{conclusion}")
         report_text = self.get_report()
         
         density_img = self._generate_density_plot()
@@ -703,16 +709,34 @@ def main():
     TG_TOKEN = "8760053592:AAGt8DcQ9_5Gu1OhwWYWtYz1IkHYHFXxL20"
     TG_CHAT_ID = "-1003787641029"
     PROXY_URL = "http://127.0.0.1:7890" 
+    app_token = "FFewwkxf2izEVxkyA7Yc821GnXe"
+    parent_node='AYw3buqaVaGuv1sLtI8chGJLn0v'
+    table_id = "tbliSMaFdxeKSM8y"
+    view_id='vewMxw9kIo'
+    field_names=["触发日期", "代码",'附件']
+    
+    page_size=100
     # dfs=filter_stock.filer_stock()
-    dfs=pd.read_sql("select * from gp.stock_analysis where need_to_analysis=1", con=engine)
+    dfs=pd.read_sql("select * from gp.stock_analysis where need_to_analysis=1 order by trade_date desc", con=engine)
 
     # dfs = pd.read_excel("GP/prod_online/script/ones.xlsx")
-    print(dfs.index.size,dfs.iloc[0,:])
-    today = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
+    # print(dfs.index.size,dfs.iloc[0,:])
+    # today = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
     # dfs['日期']=dfs['日期'].
     # dfs=dfs.loc[dfs['日期'].astype(str) == today.strftime('%Y-%m-%d')]
 
-    print(today.strftime('%Y-%m-%d'))
+    # print(today.strftime('%Y-%m-%d'))
+
+    # dfs=pd.DataFrame([{'stock_code':'sh600552',
+    #                 'stock_name':'凯盛科技'},
+    #                 {'stock_code':'sh601619',
+    #                 'stock_name':'嘉泽新能'},
+    #                 {'stock_code':'sh603032',
+    #                 'stock_name':'德新科技'},
+    #                 {'stock_code':'sh603315',
+    #                 'stock_name':'福鞍股份'}])
+
+
 
     if dfs.empty:
         print("今日无数据")
@@ -721,8 +745,16 @@ def main():
 
         stock_code = v['stock_code']
         stock_name = v['stock_name']
+        trade_date = v['trade_date']
 
-        print(f"正在获取 {stock_name} ({stock_code}) 数据...")
+        # 1. 将 date 对象转换为字符串
+        trade_date_str = trade_date.strftime("%Y-%m-%d")
+
+        # 2. 将字符串解析为 datetime 对象 (时间部分默认为 00:00:00)
+        trade_date_dt = datetime.strptime(trade_date_str, "%Y-%m-%d")
+
+        # 3. 现在可以安全地调用 timestamp() 方法了
+        timestamp = int(trade_date_dt.timestamp()) * 1000
         
         try:
             df = ak.stock_zh_a_tick_tx_js(symbol=stock_code)
@@ -730,8 +762,8 @@ def main():
             print(f"数据获取失败：{e}")
             exit()
 
-        density_img_path= "prod_online/imges/temp_image.png"
-        fundflow_img_path= "prod_online/imges/fundflow_img.png"
+        density_img_path= f"prod_online/imges/deep_img/{stock_name}_temp_image_{today_str}.png"
+        fundflow_img_path= f"prod_online/imges/deep_img/{stock_name}_fundflow_img_{today_str}.png"
         save_paths={
             "density_img_path":density_img_path,
             "fundflow_img_path":fundflow_img_path
@@ -745,7 +777,7 @@ def main():
         if density_img: images_to_send.append(density_img)
         if fundflow_img: images_to_send.append(fundflow_img)
         
-        send_telegram_message_with_images(TG_TOKEN, TG_CHAT_ID, report_text, images_to_send, proxy_url=PROXY_URL)
+        # send_telegram_message_with_images(TG_TOKEN, TG_CHAT_ID, report_text, images_to_send, proxy_url=PROXY_URL)
         
         
 
@@ -754,13 +786,52 @@ def main():
         context={
                 "text":report_text
             }
-        fs_client.set_message_for_text('chat_id','oc_dca02b55253dc48c8d9ce03e1b16e261',json.dumps(context))
-        fs_client.set_message_for_image('chat_id', 'oc_dca02b55253dc48c8d9ce03e1b16e261',
-                                            density_img_path)
-        fs_client.set_message_for_image('chat_id', 'oc_dca02b55253dc48c8d9ce03e1b16e261',
-                                            fundflow_img_path)
-        # fs_client.set_message_for_file('chat_id', 'oc_cd642a7fec1dcd847e91b2e1775809d2',excel_path,'result.xlsx')
+        # fs_client.set_message_for_text('chat_id','oc_dca02b55253dc48c8d9ce03e1b16e261',json.dumps(context))
+        # fs_client.set_message_for_image('chat_id', 'oc_dca02b55253dc48c8d9ce03e1b16e261',density_img_path)
+        # fs_client.set_message_for_image('chat_id', 'oc_dca02b55253dc48c8d9ce03e1b16e261',fundflow_img_path)
+        density_img_res=fs_client.upload_AllMedia(file_path=save_paths.get('density_img_path'),file_name=f'{stock_name}_density_image_{today_str}.png',parent_type='bitable_image',parent_node=parent_node)
+        density_img_token=density_img_res.data.file_token
 
+        fundflow_img_res=fs_client.upload_AllMedia(file_path=save_paths.get('fundflow_img_path'),file_name=f'{stock_name}_fundflow_image_{today_str}.png',parent_type='bitable_image',parent_node=parent_node)
+        fundflow_img_token=fundflow_img_res.data.file_token
 
+        filter={
+                "conjunction": "and",
+                "conditions": [
+                    {
+                        "field_name": "触发日期",
+                        "operator": "is",
+                        "value": ["ExactDate",f'{timestamp}']
+                    },
+                    {
+                        "field_name": "代码",
+                        "operator": "is",
+                        "value": [f"{stock_code}"]
+                    }
+                ]
+            }
+        record=fs_client.get_TableRecord(app_token=app_token,table_id=table_id,view_id=view_id,field_names=field_names,filter=filter,page_size=page_size)
+        report_text_ls=report_text.split("===============================================")
+
+        for item in record.data.items:
+            fjls=[{"file_token":f"{fundflow_img_token}"},{"file_token":f"{density_img_token}"}]
+            attachments = item.fields.get('附件')
+            if attachments:
+                for fjitems in item.fields.get('附件',):
+                    if not fjitems.get("file_token"):
+                        continue
+                    # 只有当 file_token 存在时，才会执行到这里
+                    fjls.append({"file_token": fjitems.get("file_token")})
+            else:
+                pass
+            
+            record_id=item.record_id
+            fields={"附件":fjls,
+                    "开盘后15分钟":report_text_ls[1],
+                    "收盘前15分钟":report_text_ls[2],
+                    "全天交易情况":report_text_ls[3]
+                    }
+            fs_client.update_TableRecord(app_token=app_token,table_id=table_id,record_id=record_id,fields=fields)
+            logger.info("执行成功")
 if __name__ == "__main__":
     main()
