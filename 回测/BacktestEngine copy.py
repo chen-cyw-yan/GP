@@ -1,6 +1,7 @@
 import pandas as pd                      # 数据处理库
 import numpy as np                       # 数值计算库
 from sqlalchemy import create_engine     # 数据库连接
+# import 
 
 class BacktestEngine:
 
@@ -58,97 +59,94 @@ class BacktestEngine:
     # 获取下一交易日数据
     # ==========================
     def get_next_day(self, code, date):
-        df = self.df[self.df['code'] == code]  # 取该股票全部数据
 
-        idx = df[df['date'] == date].index     # 找当前日期索引
-        if len(idx) == 0:                      # 没找到
+        df = self.df[self.df['code'] == code]
+
+        # 找未来的第一天
+        df = df[df['date'] > date]
+
+        if df.empty:
             return None
 
-        idx = idx[0]                           # 取位置
-        if idx + 1 >= len(df):                 # 如果已经最后一天
-            return None
-
-        return df.iloc[idx + 1]                # 返回下一天
+        return df.iloc[0]
 
     # ==========================
     # 买入逻辑
     # ==========================
     def try_buy(self, date):
 
-        # 找当天触发信号的股票
         today_signal = self.signal_df[self.signal_df['date'] == date]
 
-        if today_signal.empty:                 # 如果没有信号
+        print(f"\n📅 {date} | 信号数: {len(today_signal)} | 当前持仓: {len(self.positions)} | 现金: {self.cash:.2f}")
+
+        if today_signal.empty:
+            print("❌ 无信号")
             return
 
-        # 计算剩余可买仓位数量
         available_slots = self.max_positions - len(self.positions)
 
-        if available_slots <= 0:               # 如果仓位满了
+        if available_slots <= 0:
+            print("⚠️ 仓位已满")
             return
 
-        candidates = []                       # 候选股票列表
+        candidates = []
 
-        # 遍历信号股票
         for _, row in today_signal.iterrows():
-            code = row['code']                # 股票代码
+            code = row['code']
 
-            next_day = self.get_next_day(code, date)  # 获取次日数据
+            next_day = self.get_next_day(code, date)
 
-            if next_day is None:              # 没数据跳过
+            if next_day is None:
+                print(f"❌ {code} 次日无数据（可能停牌/日期不匹配）")
                 continue
 
-            candidates.append(next_day)       # 加入候选池
+            # print(f"✅ {code} 找到次日: {next_day['date']}")
 
-        if not candidates:                    # 如果没有候选
+            candidates.append(next_day)
+
+        if not candidates:
+            print("❌ 没有可买候选")
             return
 
-        candidates_df = pd.DataFrame(candidates)  # 转DataFrame
+        candidates_df = pd.DataFrame(candidates)
 
-        # ===== 根据优先级排序 =====
+        # 排序
         if self.buy_priority == 'turnover':
             candidates_df = candidates_df.sort_values('turnover', ascending=False)
-
         elif self.buy_priority == 'amount':
             candidates_df = candidates_df.sort_values('amount', ascending=False)
-
         elif self.buy_priority == 'market_cap':
-            # 计算流通市值
             candidates_df['market_cap'] = candidates_df['close'] * candidates_df['outstanding_share']
             candidates_df = candidates_df.sort_values('market_cap', ascending=False)
 
-        # 只保留最多可买数量
         candidates_df = candidates_df.head(available_slots)
 
-        # 遍历买入
+        print(f"🎯 候选股票: {list(candidates_df['code'])}")
+
         for _, row in candidates_df.iterrows():
 
-            code = row['code']               # 股票代码
-
-            # 买入价格（根据模式）
+            code = row['code']
             price = row['open'] if self.buy_mode == 'open' else row['close']
 
-            # 每只股票分配资金（平均分）
             cash_per_stock = self.cash / available_slots if available_slots > 0 else 0
+            shares = cash_per_stock // price
 
-            shares = cash_per_stock // price  # 可买股数（向下取整）
-
-            if shares <= 0:                  # 买不起
+            if shares <= 0:
+                print(f"❌ {code} 买不起 | price={price:.2f}, cash_per_stock={cash_per_stock:.2f}")
                 continue
 
-            cost = shares * price           # 实际花费
+            cost = shares * price
+            self.cash -= cost
 
-            self.cash -= cost               # 扣除现金
-
-            # 记录持仓
             self.positions[code] = {
-                'buy_price': price,         # 买入价格
-                'shares': shares,           # 股数
-                'buy_date': row['date'],    # 买入日期
-                'max_profit': 0             # 历史最大收益
+                'buy_price': price,
+                'shares': shares,
+                'buy_date': row['date'],
+                'max_profit': 0
             }
 
-            # 记录交易
+            print(f"🟢 BUY {code} | price={price:.2f} | shares={shares} | cost={cost:.2f}")
+
             self.trade_log.append({
                 'date': row['date'],
                 'code': code,
@@ -162,48 +160,45 @@ class BacktestEngine:
     # ==========================
     def try_sell(self, date):
 
-        remove_list = []                    # 待删除持仓
+        remove_list = []
 
         for code, pos in self.positions.items():
 
-            row = self.get_row(code, date) # 当前行情
+            row = self.get_row(code, date)
             if row is None:
                 continue
 
-            price = row['close']           # 用收盘价卖出
-
-            # 当前收益率
+            price = row['close']
             ret = (price - pos['buy_price']) / pos['buy_price']
 
-            # 更新历史最大收益
             pos['max_profit'] = max(pos['max_profit'], ret)
 
-            sell = False                  # 是否卖出
+            sell = False
+            reason = ""
 
-            # ===== 持仓天数止盈 =====
             if 'max_hold_days' in self.sell_config:
                 days = (date - pos['buy_date']).days
                 if days >= self.sell_config['max_hold_days']:
                     sell = True
+                    reason = f"持仓天数 {days}"
 
-            # ===== 收益止盈 =====
-            if 'take_profit' in self.sell_config:
-                if ret >= self.sell_config['take_profit']:
-                    sell = True
+            if 'take_profit' in self.sell_config and ret >= self.sell_config['take_profit']:
+                sell = True
+                reason = f"止盈 {ret:.2%}"
 
-            # ===== 止损 =====
-            if 'stop_loss' in self.sell_config:
-                if ret <= -self.sell_config['stop_loss']:
-                    sell = True
+            if 'stop_loss' in self.sell_config and ret <= -self.sell_config['stop_loss']:
+                sell = True
+                reason = f"止损 {ret:.2%}"
 
-            # ===== 回撤止损 =====
             if 'drawdown' in self.sell_config:
                 if pos['max_profit'] - ret >= self.sell_config['drawdown']:
                     sell = True
+                    reason = f"回撤 {pos['max_profit'] - ret:.2%}"
 
-            # ===== 执行卖出 =====
             if sell:
-                self.cash += pos['shares'] * price  # 回收资金
+                self.cash += pos['shares'] * price
+
+                print(f"🔴 SELL {code} | price={price:.2f} | return={ret:.2%} | 原因={reason}")
 
                 self.trade_log.append({
                     'date': date,
@@ -216,9 +211,55 @@ class BacktestEngine:
 
                 remove_list.append(code)
 
-        # 删除已卖出的持仓
         for code in remove_list:
             del self.positions[code]
+    def export_to_excel(self, file_path="backtest_result.xlsx"):
+
+        # ===== 1. 净值曲线 =====
+        equity_df = self.equity_df.copy()
+
+        # ===== 2. 交易记录 =====
+        trades_df = pd.DataFrame(self.trade_log)
+
+        # ===== 3. 当前持仓 =====
+        pos_list = []
+
+        final_date = self.equity_df['date'].iloc[-1]
+
+        for code, pos in self.positions.items():
+
+            row = self.get_row(code, final_date)
+
+            if row is not None:
+                price = row['close']
+            else:
+                tmp = self.df[self.df['code'] == code]
+                tmp = tmp[tmp['date'] <= final_date]
+                if tmp.empty:
+                    continue
+                price = tmp.iloc[-1]['close']
+
+            ret = (price - pos['buy_price']) / pos['buy_price']
+
+            pos_list.append({
+                'code': code,
+                'buy_price': pos['buy_price'],
+                'shares': pos['shares'],
+                'buy_date': pos['buy_date'],
+                'current_price': price,
+                'return': ret
+            })
+
+        positions_df = pd.DataFrame(pos_list)
+
+        # ===== 写入Excel =====
+        with pd.ExcelWriter(file_path, engine='xlsxwriter') as writer:
+            equity_df.to_excel(writer, sheet_name='equity', index=False)
+            trades_df.to_excel(writer, sheet_name='trades', index=False)
+            positions_df.to_excel(writer, sheet_name='positions', index=False)
+
+        print(f"\n📊 回测结果已导出：{file_path}")
+
 
     # ==========================
     # 主回测流程
@@ -249,7 +290,29 @@ class BacktestEngine:
             })
 
         self.equity_df = pd.DataFrame(equity_curve)  # 转DataFrame
+        # ==========================
+        # 最终清算（强制卖出所有持仓）
+        # ==========================
+        final_date = dates[-1]
 
+        final_value = self.cash
+
+        for code, pos in self.positions.items():
+            row = self.get_row(code, final_date)
+
+            if row is not None:
+                price = row['close']
+            else:
+                # ⚠️ fallback：用最近价格（避免丢失）
+                tmp = self.df[self.df['code'] == code]
+                tmp = tmp[tmp['date'] <= final_date]
+                if tmp.empty:
+                    continue
+                price = tmp.iloc[-1]['close']
+
+            final_value += pos['shares'] * price
+
+        print(f"\n🏁 最终资产: {final_value:.2f} | 现金: {self.cash:.2f} | 持仓数: {len(self.positions)}")
         return self.equity_df                         # 返回结果
 if __name__ == '__main__':
     engine = create_engine(
@@ -267,7 +330,7 @@ if __name__ == '__main__':
         buy_mode='open',
         buy_priority='turnover',
         sell_config={
-            'max_hold_days': 10,
+            'max_hold_days': 5,
             'take_profit': 0.1,
             'stop_loss': 0.05,
             'drawdown': 0.05
@@ -276,5 +339,7 @@ if __name__ == '__main__':
         max_positions=5
     )
     result = engine.run()
+    engine.export_to_excel("回测结果.xlsx")
     print(result)
     pass
+
