@@ -744,8 +744,8 @@ def main():
             print(f"数据获取失败：{e}")
             exit()
 
-        density_img_path= f"prod_online/imges/deep_img/{stock_name}_temp_image.png"
-        fundflow_img_path= f"prod_online/imges/deep_img/{stock_name}_fundflow_img.png"
+        density_img_path= f"prod_online/imges/temp_image.png"
+        fundflow_img_path= f"prod_online/imges/fundflow_img.png"
         save_paths={
             "density_img_path":density_img_path,
             "fundflow_img_path":fundflow_img_path
