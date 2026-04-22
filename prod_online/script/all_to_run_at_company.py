@@ -28,13 +28,13 @@ def main():
     selector.main()
 
     # logger.info("="*30 + " 开始执行板块分析任务 " + "="*30)
-    block_analysis.main()
+    # block_analysis.main()
 
     logger.info("="*30 + " 开始执行本日大小单阈值分析任务 " + "="*30)
-    threshold.main()
+    # threshold.main()
 
     logger.info("="*30 + " 开始执行股票深度分析任务 " + "="*30)
-    deep_report.main()
+    # deep_report.main()
     
     logger.info("="*30 + " 执行完成 " + "="*30)
 if __name__ == '__main__':
