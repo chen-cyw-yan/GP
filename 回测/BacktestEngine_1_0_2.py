@@ -48,11 +48,12 @@ class BacktestEngine:
         self.df['code'] = self.df['code'].astype(str)      # 股票代码统一字符串
         self.signal_df['code'] = self.signal_df['code'].astype(str)
         self.df = self.df.merge(
-        self.signal_df[['code', 'date', 'min_sell_price']],
-        on=['code', 'date'],
-        how='left'
-    )
-        self.df['min_sell_price'] = self.df.groupby('code')['min_sell_price'].ffill()
+            self.signal_df[['code', 'date', 'min_sell_price']],
+            on=['code', 'date'],
+            how='left',
+            validate='m:1'
+        )
+        # self.df['min_sell_price'] = self.df.groupby('code')['min_sell_price'].ffill()
     # ==========================
     # 加载数据库数据
     # ==========================
@@ -118,6 +119,46 @@ class BacktestEngine:
             pass
 
         return merged
+    def dynamic_take_profit(self, pos, row):
+
+        close = row['close']
+        high = row['high']
+
+        # 更新最高价
+        pos['peak_price'] = max(pos.get('peak_price', pos['buy_price']), high)
+
+        buy_price = pos['buy_price']
+        peak_price = pos['peak_price']
+
+        profit = (peak_price - buy_price) / buy_price
+        drawdown = (peak_price - close) / peak_price
+        # print(close,high,peak_price,profit,drawdown)
+        # =========================
+        # 动态止盈曲线（核心）
+        # =========================
+
+        # ① 小波段：不动
+        if profit < 0.1:
+            return False, 0, ''
+
+        # ② 10%~30%：回撤3%减仓
+        if 0.1 <= profit < 0.3:
+            if drawdown > 0.03:
+                return True, 1, '10~30%区间回撤减仓'
+
+        # ③ 30%~50%：回撤5%减仓
+        if 0.3 <= profit < 0.5:
+            if drawdown > 0.05:
+                return True, 1, '30~50%区间回撤减仓'
+
+        # ④ >50%：回撤8%清仓
+        if profit >= 0.5:
+            if drawdown > 0.08:
+                return True, 1.0, '高位回撤止盈'
+
+        return False, 0, ''
+
+
     # ==========================
     # 计算卖出规则
     # ==========================
@@ -146,20 +187,25 @@ class BacktestEngine:
         pos['max_price'] = max(pos.get('max_price', buy_price), high)
         drawdown = (pos['max_price'] - close) / pos['max_price']
         high_to_close = (high - close) / high if high > 0 else 0
-        min_sell_price = row.get('min_sell_price')
+        # min_sell_price = row.get('min_sell_price')
+        min_sell_price = pos.get('min_sell_price')
         # ==========================
         # 规则判断（全部可选）
         # ==========================
+        # print('min_sell_price',min_sell_price)
         if min_sell_price is not None:
             # 收盘跌破（稳健）
             # print(close <= min_sell_price)
             if close <= min_sell_price:
-                return True, 1, '跌破自定义止损价'
+                return True, 1, '硬止损'
 
             # 如果你想更激进（盘中触发）
             # if row['low'] < min_sell_price:
             #     return True, 1, '盘中跌破止损价'
-        
+        tp_flag, tp_pct, tp_reason = self.dynamic_take_profit(pos, row)
+        # print('dynamic_take_profit',tp_flag, tp_pct, tp_reason)
+        if tp_flag:
+            return True, tp_pct, tp_reason
 
         # 1️⃣ 总盈利
         if config.get('total_profit') is not None:
@@ -286,14 +332,20 @@ class BacktestEngine:
             # ⭐ 生成唯一交易ID
             self.trade_id_counter += 1
             trade_id = self.trade_id_counter
+            # print(row)
+            min_sell_price = row['min_sell_price_y']
 
             self.positions.append({
-                'trade_id': trade_id,        # ⭐ 新增
+                'trade_id': trade_id,
                 'code': code,
                 'buy_price': price,
                 'shares': shares,
                 'buy_date': next_day['date'],
-                'min_sell_price': row.get('min_sell_price', None)
+
+                # ⭐ 强制落地（关键）
+                'min_sell_price': None if pd.isna(min_sell_price) else float(min_sell_price),
+
+                'peak_price': price
             })
 
             self.trade_log.append({
