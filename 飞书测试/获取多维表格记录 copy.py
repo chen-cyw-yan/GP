@@ -35,7 +35,8 @@ def main():
                     {
                         "field_name": "代码",   # 单选列
                         "operator": "is",
-                        "value": ["sh600552"]                    }
+                        "value": ["sh600552"]
+                        }
                 ]
             })
             .build()
@@ -58,4 +59,4 @@ def main():
 
 if __name__ == "__main__":
     response=main()
-    print(response.data)
+    print(response)
