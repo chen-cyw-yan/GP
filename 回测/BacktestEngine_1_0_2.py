@@ -142,7 +142,7 @@ class BacktestEngine:
             return False, 0, ''
 
         # ② 10%~30%：回撤3%减仓
-        if 0.1 <= profit < 0.3:
+        if 0.05 <= profit < 0.1:
             if drawdown > 0.03:
                 return True, 1, '10~30%区间回撤减仓'
 

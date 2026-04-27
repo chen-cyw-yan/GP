@@ -267,24 +267,23 @@ def run():
     df=df.loc[is_main_board]
 
     code_ls=[
-            'sh600726',
-            'sz001234',
-            'sh600986',
-            'sh603115',
-            'sz300890',
-            'sh600499',
-            'sz002947',
+            'sh601778',
+            'sh600160',
+            'sh600330',
+            'sh603005',
+            'sh600499'
             ]
 
 
-    date = pd.to_datetime('2026-04-24')
+    date = pd.to_datetime('2026-04-27')
     day_df = df.loc[
        (df['date'] == date) &
-        ((df['buy_signal'])  | (df['code'].isin(code_ls)))
+        ((df['buy_signal'])  |
+          (df['code'].isin(code_ls)))
     ]
 
     logger.info("="*30 + " 清除文件 " + "="*30)
-    output_dir = r'E:\stock\GP\回测\html'
+    output_dir = r'C:\Users\cyw\Desktop\jupyternotebook\git-python\GP\回测\html'
     clear_folder(output_dir)
 
     logger.info("="*30 + " 生成K线图 " + "="*30)
