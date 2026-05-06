@@ -5,6 +5,7 @@ from .services.strategy_data import (
     get_strategy_frame,
     invalidate_strategy_cache,
     list_buy_signals_recent,
+    list_stock_analysis_startup,
     strategy_search_stocks,
 )
 
@@ -43,6 +44,29 @@ def api_buy_signals():
         page=page,
         page_size=page_size,
     )
+    return jsonify(
+        {
+            "ok": True,
+            "items": items,
+            "page": page,
+            "page_size": page_size,
+            "total": total,
+        }
+    )
+
+
+@strategy_bp.route("/api/strategy/startup-list")
+def api_startup_list():
+    """启动策列：stock_analysis.need_to_analysis = '1'"""
+    page, page_size = _parse_page_args()
+    try:
+        items, total = list_stock_analysis_startup(
+            current_app.config["DATABASE_URI"],
+            page=page,
+            page_size=page_size,
+        )
+    except RuntimeError as e:
+        return jsonify({"ok": False, "error": str(e)}), 503
     return jsonify(
         {
             "ok": True,

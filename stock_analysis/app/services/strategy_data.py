@@ -325,6 +325,80 @@ def list_buy_signals_recent(
     return rows[start : start + ps], total
 
 
+def list_stock_analysis_startup(
+    engine_uri: str,
+    page: int = 1,
+    page_size: int = 20,
+) -> tuple[list[dict[str, Any]], int]:
+    """
+    读取 gp.stock_analysis 中 need_to_analysis='1' 的记录（启动策列）。
+    """
+    p = max(1, int(page))
+    ps = max(1, min(int(page_size), 100))
+    offset = (p - 1) * ps
+    try:
+        engine = create_engine(engine_uri)
+    except SQLAlchemyError as e:
+        logger.exception("创建数据库引擎失败（启动策列）")
+        raise RuntimeError(f"数据库不可用: {e}") from e
+
+    count_sql = (
+        "SELECT COUNT(*) AS c FROM stock_analysis WHERE need_to_analysis = '1'"
+    )
+    page_sql = """
+    SELECT stock_code, stock_name, trade_date, trigger_count,
+           is_abnormal_type, warning_info, industry_block, concept_block,
+           update_time
+    FROM stock_analysis
+    WHERE need_to_analysis = '1'
+    ORDER BY (trade_date IS NULL) ASC, trade_date DESC, update_time DESC
+    LIMIT {lim} OFFSET {off}
+    """.format(
+        lim=int(ps),
+        off=int(offset),
+    )
+
+    try:
+        total_df = pd.read_sql(count_sql, engine)
+        total = int(total_df.iloc[0]["c"]) if len(total_df) else 0
+        if total == 0:
+            return [], 0
+        df = pd.read_sql(page_sql, engine)
+    except SQLAlchemyError as e:
+        logger.exception("查询 stock_analysis 失败")
+        raise RuntimeError(f"读取启动策列失败: {e}") from e
+
+    rows: list[dict[str, Any]] = []
+    for _, row in df.iterrows():
+        td = row.get("trade_date")
+        date_str = None
+        if td is not None and not pd.isna(td):
+            if hasattr(td, "strftime"):
+                date_str = td.strftime("%Y-%m-%d")
+            else:
+                date_str = str(td)[:10]
+        rows.append(
+            {
+                "code": str(row["stock_code"]),
+                "name": str(row.get("stock_name") or "") or str(row["stock_code"]),
+                "date": date_str,
+                "trigger_count": int(row["trigger_count"])
+                if pd.notna(row.get("trigger_count"))
+                else None,
+                "is_abnormal_type": str(row["is_abnormal_type"])
+                if pd.notna(row.get("is_abnormal_type")) and row.get("is_abnormal_type")
+                else None,
+                "warning_info": str(row["warning_info"])
+                if pd.notna(row.get("warning_info")) and row.get("warning_info")
+                else None,
+                "industry_block": str(row["industry_block"])
+                if pd.notna(row.get("industry_block")) and row.get("industry_block")
+                else None,
+            }
+        )
+    return rows, total
+
+
 def strategy_search_stocks(
     df: pd.DataFrame,
     query: str,

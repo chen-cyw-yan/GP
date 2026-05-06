@@ -68,74 +68,138 @@
     display: flex;
     flex-direction: column;
     min-height: 0;
+    gap: 0.5rem;
+}
+
+#sidebar-normal {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    gap: 0.45rem;
+}
+
+#sidebar-normal[hidden] {
+    display: none !important;
+}
+
+#sidebar-search {
+    flex: 1 1 0%;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
     gap: 0.35rem;
+}
+
+#sidebar-search[hidden] {
+    display: none !important;
+}
+
+/* 从长期 hidden 显示出来后，保证占有 list-panel 剩余高度（避免高度为 0 看不到结果） */
+#sidebar-search:not([hidden]) {
+    display: flex !important;
+    flex: 1 1 0%;
+    min-height: 12rem;
+}
+
+.acc-block {
+    border: 1px solid #dbeafe;
+    border-radius: 10px;
+    background: #f8fafc;
+    overflow: hidden;
+    /* 折叠时只占标题高度，不把列表区域「预留」住 */
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+}
+
+/* 仅展开的手风琴参与分配侧栏剩余高度，下方区块会顶上来 */
+.acc-block[open] {
+    flex: 1 1 0%;
+    min-height: 0;
+}
+
+.acc-summary {
+    list-style: none;
+    cursor: pointer;
+    padding: 0.45rem 0.65rem;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #1e40af;
+    background: linear-gradient(180deg, #e0f2fe 0%, #dbeafe 100%);
+    border-radius: 9px 9px 0 0;
+    user-select: none;
+}
+
+.acc-block:not([open]) .acc-summary {
+    border-radius: 9px;
+}
+
+.acc-summary::-webkit-details-marker {
+    display: none;
+}
+
+.acc-summary::before {
+    content: "▾ ";
+    font-size: 0.7rem;
+    opacity: 0.85;
+}
+
+.acc-block:not([open]) .acc-summary::before {
+    content: "▸ ";
+}
+
+.acc-scroll {
+    flex: 1;
+    min-height: 120px;
+    /* 不在此处限高，由父级 flex 分配高度；折叠 sibling 后剩余高度会给展开区块 */
+    max-height: none;
+    overflow-y: auto;
+    padding: 0.4rem 0.45rem 0.35rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    background: #fff;
+}
+
+/* 检索模式：由侧栏 flex 分配高度，避免父级无高度时 max-height 把可视区域算没 */
+.acc-scroll.acc-scroll--search {
+    flex: 1 1 0%;
+    min-height: 0;
+    max-height: none;
 }
 
 .stock-list {
     flex: 1;
-    overflow-y: auto;
+    overflow-y: visible;
     display: flex;
     flex-direction: column;
     gap: 0.35rem;
-    padding-right: 0.15rem;
+    padding-right: 0.1rem;
 }
 
-.list-pager {
+.stock-list--nested {
+    flex: 0 0 auto;
+}
+
+.infinite-footer {
     flex-shrink: 0;
-    padding-top: 0.35rem;
-    border-top: 1px solid #e5e7eb;
-    font-size: 0.78rem;
-    color: #4b5563;
-}
-
-.pager-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.35rem;
-    margin-bottom: 0.35rem;
-}
-
-.pager-btn {
-    padding: 0.28rem 0.45rem;
-    font-size: 0.75rem;
-    border: 1px solid #cbd5e1;
-    border-radius: 6px;
-    background: #fff;
-    cursor: pointer;
-    color: #374151;
-}
-
-.pager-btn:hover:not(:disabled) {
-    background: #f3f4f6;
-    border-color: #94a3b8;
-}
-
-.pager-btn:disabled {
-    opacity: 0.45;
-    cursor: not-allowed;
-}
-
-.pager-info {
-    flex: 1;
+    font-size: 0.72rem;
+    color: #6b7280;
     text-align: center;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    padding: 0.25rem 0 0.15rem;
+    line-height: 1.35;
 }
 
-.pager-size-row {
-    display: flex;
-    align-items: center;
-    gap: 0.35rem;
-    justify-content: center;
+.infinite-footer.error {
+    color: #b91c1c;
 }
 
-.pager-select {
-    padding: 0.2rem 0.35rem;
-    font-size: 0.75rem;
-    border-radius: 6px;
-    border: 1px solid #cbd5e1;
+.scroll-sentinel {
+    height: 1px;
+    width: 100%;
+    flex-shrink: 0;
+    pointer-events: none;
 }
 
 .stock-item {

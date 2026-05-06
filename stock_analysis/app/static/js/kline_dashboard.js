@@ -1,23 +1,56 @@
 (function () {
   const chartDom = document.getElementById("chart-main");
-  const stockListEl = document.getElementById("stock-list");
   const searchInput = document.getElementById("stock-search");
   const statusEl = document.getElementById("chart-status");
   const manualCode = document.getElementById("manual-code");
   const btnManual = document.getElementById("btn-load-manual");
-  const pagerPrev = document.getElementById("pager-prev");
-  const pagerNext = document.getElementById("pager-next");
-  const pagerInfo = document.getElementById("pager-info");
-  const pagerPageSize = document.getElementById("pager-page-size");
+
+  const sidebarNormal = document.getElementById("sidebar-normal");
+  const sidebarSearch = document.getElementById("sidebar-search");
+  const searchPanelTitle = document.getElementById("search-panel-title");
+  const listPullup = document.getElementById("list-pullup");
+  const listStartup = document.getElementById("list-startup");
+  const listSearch = document.getElementById("list-search");
+  const footerPullup = document.getElementById("footer-pullup");
+  const footerStartup = document.getElementById("footer-startup");
+  const footerSearch = document.getElementById("footer-search");
+  const scrollPullup = document.getElementById("scroll-pullup");
+  const scrollStartup = document.getElementById("scroll-startup");
+  const scrollSearch = document.getElementById("scroll-search");
+  const sentinelPullup = document.getElementById("sentinel-pullup");
+  const sentinelStartup = document.getElementById("sentinel-startup");
+  const sentinelSearch = document.getElementById("sentinel-search");
+
+  const PAGE_SIZE = 20;
 
   let chart = echarts.init(chartDom, null, { renderer: "canvas" });
   let activeCode = null;
   let searchTimer = null;
 
-  const listState = {
-    page: 1,
-    pageSize: parseInt(pagerPageSize.value, 10) || 20,
+  const pullupState = {
+    page: 0,
+    loaded: 0,
     total: 0,
+    loading: false,
+    done: false,
+    error: null,
+  };
+  const startupState = {
+    page: 0,
+    loaded: 0,
+    total: 0,
+    loading: false,
+    done: false,
+    error: null,
+  };
+  const searchState = {
+    page: 0,
+    loaded: 0,
+    total: 0,
+    loading: false,
+    done: false,
+    error: null,
+    query: "",
   };
 
   function setStatus(msg, isErr) {
@@ -363,182 +396,367 @@
     return " · 换手 " + Number(v).toFixed(2) + "%";
   }
 
-  function totalPages() {
-    if (listState.total === 0) return 1;
-    return Math.ceil(listState.total / listState.pageSize);
-  }
-
-  function applyPagerUi() {
-    const tp = totalPages();
-    pagerInfo.textContent =
-      "第 " +
-      listState.page +
-      " / " +
-      tp +
-      " 页 · 共 " +
-      listState.total +
-      " 条";
-    pagerPrev.disabled = listState.page <= 1 || listState.total === 0;
-    pagerNext.disabled = listState.page >= tp || listState.total === 0;
-  }
-
-  function renderStockList(items, mode) {
-    stockListEl.innerHTML = "";
-    if (!items.length) {
-      stockListEl.innerHTML =
-        '<div class="status-bar">' +
-        (mode === "search"
-          ? "未找到匹配股票，请换关键词或输入 sh600000 形式代码"
-          : "近期暂无买入信号；可用上方检索任意标的查看K线") +
-        "</div>";
+  function updateInfiniteFooter(footerEl, st) {
+    if (!footerEl) return;
+    footerEl.classList.toggle("error", !!st.error);
+    if (st.error) {
+      footerEl.textContent = st.error;
       return;
     }
-    items.forEach((it, idx) => {
-      const div = document.createElement("div");
-      div.className = "stock-item palette-" + (idx % 6);
-      div.dataset.code = it.code;
-      div.setAttribute("role", "button");
-      div.tabIndex = 0;
-      const meta =
-        mode === "search"
-          ? it.code + " · 点击切换K线图"
-          : it.code +
-            " · 信号日 " +
-            (it.date || "-") +
-            turnoverLabel(it);
-      div.innerHTML =
-        '<div class="name">' +
-        (it.name || it.code) +
-        '</div><div class="meta">' +
-        meta +
-        "</div>";
-      div.addEventListener("click", () => loadKline(it.code));
-      div.addEventListener("keydown", function (ev) {
-        if (ev.key === "Enter" || ev.key === " ") {
-          ev.preventDefault();
-          loadKline(it.code);
-        }
-      });
-      stockListEl.appendChild(div);
+    if (st.loading) {
+      footerEl.textContent = "加载中…";
+      return;
+    }
+    if (st.total === 0 && st.loaded === 0 && st.done) {
+      footerEl.textContent = "暂无数据";
+      return;
+    }
+    const tail =
+      st.done
+        ? "已全部加载"
+        : "滚动到底部加载更多";
+    footerEl.textContent =
+      "共 " +
+      (st.total != null ? st.total : st.loaded) +
+      " 条 · " +
+      tail;
+  }
+
+  function resetStreamState(st) {
+    st.page = 0;
+    st.loaded = 0;
+    st.total = 0;
+    st.loading = false;
+    st.done = false;
+    st.error = null;
+  }
+
+  function makeStockItemEl(it, mode, paletteIdx) {
+    const div = document.createElement("div");
+    div.className = "stock-item palette-" + (paletteIdx % 6);
+    div.dataset.code = it.code;
+    div.setAttribute("role", "button");
+    div.tabIndex = 0;
+    let meta;
+    if (mode === "search") {
+      meta = it.code + " · 点击切换K线图";
+    } else if (mode === "startup") {
+      const hint = it.is_abnormal_type || it.warning_info || "";
+      meta =
+        it.code +
+        " · 日期 " +
+        (it.date || "-") +
+        (hint ? " · " + hint : "");
+    } else {
+      meta =
+        it.code +
+        " · 信号日 " +
+        (it.date || "-") +
+        turnoverLabel(it);
+    }
+    div.innerHTML =
+      '<div class="name">' +
+      (it.name || it.code) +
+      '</div><div class="meta">' +
+      meta +
+      "</div>";
+    div.addEventListener("click", () => loadKline(it.code));
+    div.addEventListener("keydown", function (ev) {
+      if (ev.key === "Enter" || ev.key === " ") {
+        ev.preventDefault();
+        loadKline(it.code);
+      }
     });
-    if (activeCode) {
-      document.querySelectorAll(".stock-item").forEach((el) => {
-        el.classList.toggle("active", el.dataset.code === activeCode);
+    return div;
+  }
+
+  function renderEmptyHint(container, mode) {
+    container.innerHTML =
+      '<div class="status-bar">' +
+      (mode === "search"
+        ? "未找到匹配股票，请换关键词或输入 sh600000 形式代码"
+        : mode === "startup"
+          ? "暂无 need_to_analysis=1 的记录"
+          : "近期暂无买入信号；可用上方检索任意标的查看K线") +
+      "</div>";
+  }
+
+  async function fetchPullupPage(append) {
+    if (pullupState.loading || pullupState.done) return;
+    pullupState.loading = true;
+    pullupState.error = null;
+    updateInfiniteFooter(footerPullup, pullupState);
+    const nextPage = append ? pullupState.page + 1 : 1;
+    try {
+      const params = new URLSearchParams({
+        turnover_min: "0",
+        recent_days: "120",
+        page: String(nextPage),
+        page_size: String(PAGE_SIZE),
       });
+      const res = await fetch("/api/strategy/buy-signals?" + params.toString());
+      const json = await res.json();
+      if (!json.ok) {
+        pullupState.error = json.error || "列表加载失败";
+        updateInfiniteFooter(footerPullup, pullupState);
+        return;
+      }
+      const items = json.items || [];
+      pullupState.total = json.total != null ? json.total : 0;
+      if (!append) {
+        listPullup.innerHTML = "";
+        pullupState.page = 0;
+        pullupState.loaded = 0;
+      }
+      pullupState.page = nextPage;
+      if (!items.length && !append) {
+        renderEmptyHint(listPullup, "signal");
+        pullupState.done = true;
+        pullupState.loaded = 0;
+      } else {
+        if (!items.length) {
+          pullupState.done = true;
+        } else {
+          const base = listPullup.querySelectorAll(".stock-item").length;
+          items.forEach((it, i) => {
+            listPullup.appendChild(makeStockItemEl(it, "signal", base + i));
+          });
+          pullupState.loaded += items.length;
+          pullupState.done = pullupState.loaded >= pullupState.total;
+          if (
+            !append &&
+            items.length &&
+            !activeCode
+          ) {
+            loadKline(items[0].code);
+          }
+        }
+      }
+      refreshActiveHighlight();
+    } catch (e) {
+      pullupState.error = "请求失败";
+    } finally {
+      pullupState.loading = false;
+      updateInfiniteFooter(footerPullup, pullupState);
     }
   }
 
-  async function syncSidebar() {
-    const q = searchInput.value.trim();
-    const titleEl = document.getElementById("stock-list-title");
-    listState.pageSize =
-      parseInt(pagerPageSize.value, 10) || 20;
-    const pageParams = {
-      page: String(listState.page),
-      page_size: String(listState.pageSize),
-    };
+  async function fetchStartupPage(append) {
+    if (startupState.loading || startupState.done) return;
+    startupState.loading = true;
+    startupState.error = null;
+    updateInfiniteFooter(footerStartup, startupState);
+    const nextPage = append ? startupState.page + 1 : 1;
     try {
-      if (q.length >= 1) {
-        titleEl.textContent =
-          "检索结果（清空检索框 → 买入信号列表）";
-        const params = new URLSearchParams({
-          q: q,
-          ...pageParams,
-        });
-        const res = await fetch(
-          "/api/strategy/search?" + params.toString()
-        );
-        const json = await res.json();
-        if (!json.ok) {
-          listState.total = 0;
-          applyPagerUi();
-          stockListEl.innerHTML =
-            '<div class="status-bar error">' +
-            (json.error || "检索失败") +
-            "</div>";
-          return;
-        }
-        listState.total = json.total != null ? json.total : 0;
-        const tp = totalPages();
-        if (listState.page > tp) {
-          listState.page = Math.max(1, tp);
-          await syncSidebar();
-          return;
-        }
-        applyPagerUi();
-        renderStockList(json.items || [], "search");
+      const params = new URLSearchParams({
+        page: String(nextPage),
+        page_size: String(PAGE_SIZE),
+      });
+      const res = await fetch("/api/strategy/startup-list?" + params.toString());
+      const json = await res.json();
+      if (!json.ok) {
+        startupState.error = json.error || "启动策列加载失败";
+        updateInfiniteFooter(footerStartup, startupState);
+        return;
+      }
+      const items = json.items || [];
+      startupState.total = json.total != null ? json.total : 0;
+      if (!append) {
+        listStartup.innerHTML = "";
+        startupState.page = 0;
+        startupState.loaded = 0;
+      }
+      startupState.page = nextPage;
+      if (!items.length && !append) {
+        renderEmptyHint(listStartup, "startup");
+        startupState.done = true;
+        startupState.loaded = 0;
       } else {
-        titleEl.textContent = "近期触发买入信号列表";
-        const params = new URLSearchParams({
-          turnover_min: "0",
-          recent_days: "120",
-          ...pageParams,
-        });
-        const res = await fetch(
-          "/api/strategy/buy-signals?" + params.toString()
-        );
-        const json = await res.json();
-        if (!json.ok) {
-          listState.total = 0;
-          applyPagerUi();
-          stockListEl.innerHTML =
-            '<div class="status-bar error">' +
-            (json.error || "列表加载失败") +
-            "</div>";
-          return;
-        }
-        listState.total = json.total != null ? json.total : 0;
-        const tp = totalPages();
-        if (listState.page > tp) {
-          listState.page = Math.max(1, tp);
-          await syncSidebar();
-          return;
-        }
-        applyPagerUi();
-        renderStockList(json.items || [], "signal");
-        if (
-          json.items &&
-          json.items.length &&
-          !activeCode &&
-          listState.page === 1
-        ) {
-          loadKline(json.items[0].code);
+        if (!items.length) {
+          startupState.done = true;
+        } else {
+          const base = listStartup.querySelectorAll(".stock-item").length;
+          items.forEach((it, i) => {
+            listStartup.appendChild(makeStockItemEl(it, "startup", base + i));
+          });
+          startupState.loaded += items.length;
+          startupState.done = startupState.loaded >= startupState.total;
         }
       }
+      refreshActiveHighlight();
     } catch (e) {
-      listState.total = 0;
-      applyPagerUi();
-      stockListEl.innerHTML =
+      startupState.error = "请求失败";
+    } finally {
+      startupState.loading = false;
+      updateInfiniteFooter(footerStartup, startupState);
+    }
+  }
+
+  async function fetchSearchPage(append) {
+    if (searchState.loading || searchState.done) return;
+    const q = searchState.query;
+    if (!q || q.length < 1) return;
+    searchState.loading = true;
+    searchState.error = null;
+    updateInfiniteFooter(footerSearch, searchState);
+    const nextPage = append ? searchState.page + 1 : 1;
+    try {
+      const params = new URLSearchParams({
+        q: q,
+        page: String(nextPage),
+        page_size: String(PAGE_SIZE),
+      });
+      const res = await fetch("/api/strategy/search?" + params.toString());
+      const json = await res.json();
+      if (!json.ok) {
+        searchState.error = json.error || "检索失败";
+        listSearch.innerHTML =
+          '<div class="status-bar error">' +
+          searchState.error +
+          "</div>";
+        searchState.done = true;
+        updateInfiniteFooter(footerSearch, searchState);
+        return;
+      }
+      const items = json.items || [];
+      searchState.total = json.total != null ? json.total : 0;
+      if (!append) {
+        listSearch.innerHTML = "";
+        searchState.page = 0;
+        searchState.loaded = 0;
+      }
+      searchState.page = nextPage;
+      if (!items.length && !append) {
+        renderEmptyHint(listSearch, "search");
+        searchState.done = true;
+        searchState.loaded = 0;
+      } else {
+        if (!items.length) {
+          searchState.done = true;
+        } else {
+          const base = listSearch.querySelectorAll(".stock-item").length;
+          items.forEach((it, i) => {
+            listSearch.appendChild(makeStockItemEl(it, "search", base + i));
+          });
+          searchState.loaded += items.length;
+          searchState.done = searchState.loaded >= searchState.total;
+        }
+      }
+      refreshActiveHighlight();
+    } catch (e) {
+      searchState.error = "请求失败";
+      listSearch.innerHTML =
         '<div class="status-bar error">请求失败</div>';
+      searchState.done = true;
+    } finally {
+      searchState.loading = false;
+      updateInfiniteFooter(footerSearch, searchState);
+    }
+  }
+
+  function refreshActiveHighlight() {
+    if (!activeCode) return;
+    document.querySelectorAll(".stock-item").forEach((el) => {
+      el.classList.toggle("active", el.dataset.code === activeCode);
+    });
+  }
+
+  function bindInfiniteScroll(scrollEl, sentinelEl, footerEl, streamState, fetchPage) {
+    if (!scrollEl || !sentinelEl) return;
+    const io = new IntersectionObserver(
+      function (entries) {
+        entries.forEach(function (en) {
+          if (!en.isIntersecting) return;
+          if (streamState.loading || streamState.done) return;
+          fetchPage(true);
+        });
+      },
+      { root: scrollEl, rootMargin: "100px", threshold: 0 }
+    );
+    io.observe(sentinelEl);
+    updateInfiniteFooter(footerEl, streamState);
+    return io;
+  }
+
+  let ioPullup = null;
+  let ioStartup = null;
+  let ioSearch = null;
+
+  function setupObservers() {
+    if (ioPullup) ioPullup.disconnect();
+    if (ioStartup) ioStartup.disconnect();
+    if (ioSearch) ioSearch.disconnect();
+    ioPullup = bindInfiniteScroll(
+      scrollPullup,
+      sentinelPullup,
+      footerPullup,
+      pullupState,
+      fetchPullupPage
+    );
+    ioStartup = bindInfiniteScroll(
+      scrollStartup,
+      sentinelStartup,
+      footerStartup,
+      startupState,
+      fetchStartupPage
+    );
+    ioSearch = bindInfiniteScroll(
+      scrollSearch,
+      sentinelSearch,
+      footerSearch,
+      searchState,
+      fetchSearchPage
+    );
+  }
+
+  async function enterSearchMode(q) {
+    sidebarNormal.setAttribute("hidden", "");
+    sidebarSearch.removeAttribute("hidden");
+    searchPanelTitle.textContent =
+      "检索结果（清空检索框恢复策列列表）";
+    resetStreamState(searchState);
+    searchState.query = q;
+    listSearch.innerHTML = "";
+    updateInfiniteFooter(footerSearch, searchState);
+    /* 检索面板默认长期 hidden，root 无布局；展开后强制重排并重建 IO，避免折叠手风琴后检索区高度为 0 或不刷新 */
+    void sidebarSearch.offsetHeight;
+    if (ioSearch) ioSearch.disconnect();
+    ioSearch = bindInfiniteScroll(
+      scrollSearch,
+      sentinelSearch,
+      footerSearch,
+      searchState,
+      fetchSearchPage
+    );
+    await fetchSearchPage(false);
+  }
+
+  async function leaveSearchMode() {
+    sidebarSearch.setAttribute("hidden", "");
+    sidebarNormal.removeAttribute("hidden");
+    resetStreamState(pullupState);
+    resetStreamState(startupState);
+    listPullup.innerHTML = "";
+    listStartup.innerHTML = "";
+    updateInfiniteFooter(footerPullup, pullupState);
+    updateInfiniteFooter(footerStartup, startupState);
+    await Promise.all([fetchPullupPage(false), fetchStartupPage(false)]);
+  }
+
+  async function onSearchInputChanged() {
+    const q = searchInput.value.trim();
+    if (q.length >= 1) {
+      resetStreamState(searchState);
+      searchState.query = q;
+      await enterSearchMode(q);
+    } else {
+      await leaveSearchMode();
     }
   }
 
   searchInput.addEventListener("input", function () {
-    listState.page = 1;
     clearTimeout(searchTimer);
-    searchTimer = setTimeout(syncSidebar, 320);
-  });
-
-  pagerPrev.addEventListener("click", function () {
-    if (listState.page > 1) {
-      listState.page -= 1;
-      syncSidebar();
-    }
-  });
-
-  pagerNext.addEventListener("click", function () {
-    const tp = totalPages();
-    if (listState.page < tp) {
-      listState.page += 1;
-      syncSidebar();
-    }
-  });
-
-  pagerPageSize.addEventListener("change", function () {
-    listState.pageSize =
-      parseInt(pagerPageSize.value, 10) || 20;
-    listState.page = 1;
-    syncSidebar();
+    searchTimer = setTimeout(onSearchInputChanged, 320);
   });
 
   btnManual.addEventListener("click", function () {
@@ -557,5 +775,7 @@
     chart.resize();
   });
 
-  syncSidebar();
+  setupObservers();
+  fetchPullupPage(false);
+  fetchStartupPage(false);
 })();
