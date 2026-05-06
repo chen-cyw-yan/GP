@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}{{ title or '股票分析系统' }}{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <header class="header">
+        <a href="{{ url_for('main.index') }}" class="brand">股票分析系统</a>
+    </header>
+    <main class="main">
+        {% block content %}{% endblock %}
+    </main>
+</body>
+</html>

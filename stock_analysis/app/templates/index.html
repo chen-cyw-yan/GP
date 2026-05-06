@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="hero">
+    <h1>欢迎使用股票分析系统</h1>
+    <p>Web 服务已就绪，可在 <code>app/routes.py</code> 中添加路由与业务接口。</p>
+    <p class="hint">健康检查：<a href="{{ url_for('main.health') }}">/health</a></p>
+    <p class="hint">试盘策略 K 线：<a href="{{ url_for('strategy.kline_dashboard') }}">/dashboard</a></p>
+</section>
+{% endblock %}

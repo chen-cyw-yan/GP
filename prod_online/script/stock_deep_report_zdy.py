@@ -724,6 +724,12 @@ def main():
     },{
         "stock_code": "sz002851",
         "stock_name": "麦格米特"
+    },{
+        "stock_code": "sh603327",
+        "stock_name": "福蓉科技"
+    },{
+        "stock_code": "sz002545",
+        "stock_name": "东方铁塔"
     }])
 
 

@@ -1,7 +1,7 @@
 import logging
 import fetch_stock_data_for_multithread as fetch_stock
 import prod_online.script.stock_selector_at_home as selector
-import stock_deep_report as deep_report
+import stock_deep_report_write_to_fs as deep_report
 import block_analysis
 import get_now_stock_data as now_stock
 import fetch_threshold as threshold
