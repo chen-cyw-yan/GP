@@ -1,12 +1,12 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" class="kline-dashboard-root">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ title or 'K线 · 股票分析系统' }}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/kline_dashboard.css') }}">
 </head>
-<body>
+<body class="kline-dashboard-body">
     <div class="layout-dashboard">
         <aside class="sidebar-dash">
             <div style="display:flex;justify-content:space-between;align-items:center">
@@ -29,27 +29,75 @@
                 <div id="sidebar-normal">
                     <details class="acc-block" open>
                         <summary class="acc-summary">拉升试盘策列</summary>
-                        <div class="acc-scroll" id="scroll-pullup">
-                            <div class="stock-list stock-list--nested" id="list-pullup"></div>
-                            <div class="infinite-footer" id="footer-pullup">加载中…</div>
-                            <div class="scroll-sentinel" id="sentinel-pullup" aria-hidden="true"></div>
+                        <div class="acc-body" id="wrap-pullup">
+                            <div class="acc-scroll-list" id="scroll-pullup">
+                                <div class="stock-list stock-list--nested" id="list-pullup"></div>
+                            </div>
+                            <div class="list-pager" id="pager-pullup-wrap">
+                                <div class="pager-row">
+                                    <button type="button" class="pager-btn" id="pager-pullup-prev">上一页</button>
+                                    <span class="pager-info" id="pager-pullup-info">—</span>
+                                    <button type="button" class="pager-btn" id="pager-pullup-next">下一页</button>
+                                </div>
+                                <div class="pager-size-row">
+                                    <label for="pager-pullup-size">每页</label>
+                                    <select id="pager-pullup-size" class="pager-select">
+                                        <option value="10">10</option>
+                                        <option value="20" selected>20</option>
+                                        <option value="50">50</option>
+                                    </select>
+                                    <span>条</span>
+                                </div>
+                            </div>
                         </div>
                     </details>
                     <details class="acc-block" open>
                         <summary class="acc-summary">启动策列</summary>
-                        <div class="acc-scroll" id="scroll-startup">
-                            <div class="stock-list stock-list--nested" id="list-startup"></div>
-                            <div class="infinite-footer" id="footer-startup">加载中…</div>
-                            <div class="scroll-sentinel" id="sentinel-startup" aria-hidden="true"></div>
+                        <div class="acc-body" id="wrap-startup">
+                            <div class="acc-scroll-list" id="scroll-startup">
+                                <div class="stock-list stock-list--nested" id="list-startup"></div>
+                            </div>
+                            <div class="list-pager" id="pager-startup-wrap">
+                                <div class="pager-row">
+                                    <button type="button" class="pager-btn" id="pager-startup-prev">上一页</button>
+                                    <span class="pager-info" id="pager-startup-info">—</span>
+                                    <button type="button" class="pager-btn" id="pager-startup-next">下一页</button>
+                                </div>
+                                <div class="pager-size-row">
+                                    <label for="pager-startup-size">每页</label>
+                                    <select id="pager-startup-size" class="pager-select">
+                                        <option value="10">10</option>
+                                        <option value="20" selected>20</option>
+                                        <option value="50">50</option>
+                                    </select>
+                                    <span>条</span>
+                                </div>
+                            </div>
                         </div>
                     </details>
                 </div>
                 <div id="sidebar-search" hidden>
                     <div class="signal-section-title" id="search-panel-title">检索结果</div>
-                    <div class="acc-scroll acc-scroll--search" id="scroll-search">
-                        <div class="stock-list stock-list--nested" id="list-search"></div>
-                        <div class="infinite-footer" id="footer-search">加载中…</div>
-                        <div class="scroll-sentinel" id="sentinel-search" aria-hidden="true"></div>
+                    <div class="acc-body acc-body--search" id="wrap-search">
+                        <div class="acc-scroll-list acc-scroll-list--search" id="scroll-search">
+                            <div class="stock-list stock-list--nested" id="list-search"></div>
+                        </div>
+                        <div class="list-pager" id="pager-search-wrap">
+                            <div class="pager-row">
+                                <button type="button" class="pager-btn" id="pager-search-prev">上一页</button>
+                                <span class="pager-info" id="pager-search-info">—</span>
+                                <button type="button" class="pager-btn" id="pager-search-next">下一页</button>
+                            </div>
+                            <div class="pager-size-row">
+                                <label for="pager-search-size">每页</label>
+                                <select id="pager-search-size" class="pager-select">
+                                    <option value="10">10</option>
+                                    <option value="20" selected>20</option>
+                                    <option value="50">50</option>
+                                </select>
+                                <span>条</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

@@ -11,45 +11,43 @@
   const listPullup = document.getElementById("list-pullup");
   const listStartup = document.getElementById("list-startup");
   const listSearch = document.getElementById("list-search");
-  const footerPullup = document.getElementById("footer-pullup");
-  const footerStartup = document.getElementById("footer-startup");
-  const footerSearch = document.getElementById("footer-search");
-  const scrollPullup = document.getElementById("scroll-pullup");
-  const scrollStartup = document.getElementById("scroll-startup");
-  const scrollSearch = document.getElementById("scroll-search");
-  const sentinelPullup = document.getElementById("sentinel-pullup");
-  const sentinelStartup = document.getElementById("sentinel-startup");
-  const sentinelSearch = document.getElementById("sentinel-search");
 
-  const PAGE_SIZE = 20;
+  const pagerPullupPrev = document.getElementById("pager-pullup-prev");
+  const pagerPullupNext = document.getElementById("pager-pullup-next");
+  const pagerPullupInfo = document.getElementById("pager-pullup-info");
+  const pagerPullupSize = document.getElementById("pager-pullup-size");
+
+  const pagerStartupPrev = document.getElementById("pager-startup-prev");
+  const pagerStartupNext = document.getElementById("pager-startup-next");
+  const pagerStartupInfo = document.getElementById("pager-startup-info");
+  const pagerStartupSize = document.getElementById("pager-startup-size");
+
+  const pagerSearchPrev = document.getElementById("pager-search-prev");
+  const pagerSearchNext = document.getElementById("pager-search-next");
+  const pagerSearchInfo = document.getElementById("pager-search-info");
+  const pagerSearchSize = document.getElementById("pager-search-size");
 
   let chart = echarts.init(chartDom, null, { renderer: "canvas" });
   let activeCode = null;
   let searchTimer = null;
 
   const pullupState = {
-    page: 0,
-    loaded: 0,
+    page: 1,
+    pageSize: parseInt(pagerPullupSize.value, 10) || 20,
     total: 0,
     loading: false,
-    done: false,
-    error: null,
   };
   const startupState = {
-    page: 0,
-    loaded: 0,
+    page: 1,
+    pageSize: parseInt(pagerStartupSize.value, 10) || 20,
     total: 0,
     loading: false,
-    done: false,
-    error: null,
   };
   const searchState = {
-    page: 0,
-    loaded: 0,
+    page: 1,
+    pageSize: parseInt(pagerSearchSize.value, 10) || 20,
     total: 0,
     loading: false,
-    done: false,
-    error: null,
     query: "",
   };
 
@@ -396,39 +394,28 @@
     return " · 换手 " + Number(v).toFixed(2) + "%";
   }
 
-  function updateInfiniteFooter(footerEl, st) {
-    if (!footerEl) return;
-    footerEl.classList.toggle("error", !!st.error);
-    if (st.error) {
-      footerEl.textContent = st.error;
-      return;
-    }
-    if (st.loading) {
-      footerEl.textContent = "加载中…";
-      return;
-    }
-    if (st.total === 0 && st.loaded === 0 && st.done) {
-      footerEl.textContent = "暂无数据";
-      return;
-    }
-    const tail =
-      st.done
-        ? "已全部加载"
-        : "滚动到底部加载更多";
-    footerEl.textContent =
-      "共 " +
-      (st.total != null ? st.total : st.loaded) +
-      " 条 · " +
-      tail;
+  function totalPages(total, pageSize) {
+    if (total <= 0) return 1;
+    return Math.ceil(total / pageSize);
   }
 
-  function resetStreamState(st) {
-    st.page = 0;
-    st.loaded = 0;
-    st.total = 0;
-    st.loading = false;
-    st.done = false;
-    st.error = null;
+  function applyPagerUi(state, infoEl, prevEl, nextEl) {
+    const tp = totalPages(state.total, state.pageSize);
+    let p = state.page;
+    if (p > tp) p = tp;
+    if (p < 1) p = 1;
+    state.page = p;
+    infoEl.textContent =
+      "第 " +
+      state.page +
+      " / " +
+      tp +
+      " 页 · 共 " +
+      state.total +
+      " 条";
+    prevEl.disabled = state.page <= 1 || state.total === 0 || state.loading;
+    nextEl.disabled =
+      state.page >= tp || state.total === 0 || state.loading;
   }
 
   function makeStockItemEl(it, mode, paletteIdx) {
@@ -481,176 +468,161 @@
       "</div>";
   }
 
-  async function fetchPullupPage(append) {
-    if (pullupState.loading || pullupState.done) return;
+  async function fetchPullupList() {
+    if (pullupState.loading) return;
     pullupState.loading = true;
-    pullupState.error = null;
-    updateInfiniteFooter(footerPullup, pullupState);
-    const nextPage = append ? pullupState.page + 1 : 1;
+    pullupState.pageSize =
+      parseInt(pagerPullupSize.value, 10) || 20;
+    applyPagerUi(pullupState, pagerPullupInfo, pagerPullupPrev, pagerPullupNext);
     try {
       const params = new URLSearchParams({
         turnover_min: "0",
         recent_days: "120",
-        page: String(nextPage),
-        page_size: String(PAGE_SIZE),
+        page: String(pullupState.page),
+        page_size: String(pullupState.pageSize),
       });
       const res = await fetch("/api/strategy/buy-signals?" + params.toString());
       const json = await res.json();
       if (!json.ok) {
-        pullupState.error = json.error || "列表加载失败";
-        updateInfiniteFooter(footerPullup, pullupState);
+        pullupState.total = 0;
+        listPullup.innerHTML =
+          '<div class="status-bar error">' +
+          (json.error || "列表加载失败") +
+          "</div>";
+        applyPagerUi(pullupState, pagerPullupInfo, pagerPullupPrev, pagerPullupNext);
         return;
       }
       const items = json.items || [];
       pullupState.total = json.total != null ? json.total : 0;
-      if (!append) {
-        listPullup.innerHTML = "";
-        pullupState.page = 0;
-        pullupState.loaded = 0;
+      const tp = totalPages(pullupState.total, pullupState.pageSize);
+      if (pullupState.page > tp) {
+        pullupState.page = Math.max(1, tp);
+        pullupState.loading = false;
+        await fetchPullupList();
+        return;
       }
-      pullupState.page = nextPage;
-      if (!items.length && !append) {
+      listPullup.innerHTML = "";
+      if (!items.length) {
         renderEmptyHint(listPullup, "signal");
-        pullupState.done = true;
-        pullupState.loaded = 0;
       } else {
-        if (!items.length) {
-          pullupState.done = true;
-        } else {
-          const base = listPullup.querySelectorAll(".stock-item").length;
-          items.forEach((it, i) => {
-            listPullup.appendChild(makeStockItemEl(it, "signal", base + i));
-          });
-          pullupState.loaded += items.length;
-          pullupState.done = pullupState.loaded >= pullupState.total;
-          if (
-            !append &&
-            items.length &&
-            !activeCode
-          ) {
-            loadKline(items[0].code);
-          }
+        items.forEach((it, i) => {
+          listPullup.appendChild(makeStockItemEl(it, "signal", i));
+        });
+        if (pullupState.page === 1 && !activeCode) {
+          loadKline(items[0].code);
         }
       }
       refreshActiveHighlight();
     } catch (e) {
-      pullupState.error = "请求失败";
+      pullupState.total = 0;
+      listPullup.innerHTML =
+        '<div class="status-bar error">请求失败</div>';
     } finally {
       pullupState.loading = false;
-      updateInfiniteFooter(footerPullup, pullupState);
+      applyPagerUi(pullupState, pagerPullupInfo, pagerPullupPrev, pagerPullupNext);
     }
   }
 
-  async function fetchStartupPage(append) {
-    if (startupState.loading || startupState.done) return;
+  async function fetchStartupList() {
+    if (startupState.loading) return;
     startupState.loading = true;
-    startupState.error = null;
-    updateInfiniteFooter(footerStartup, startupState);
-    const nextPage = append ? startupState.page + 1 : 1;
+    startupState.pageSize =
+      parseInt(pagerStartupSize.value, 10) || 20;
+    applyPagerUi(startupState, pagerStartupInfo, pagerStartupPrev, pagerStartupNext);
     try {
       const params = new URLSearchParams({
-        page: String(nextPage),
-        page_size: String(PAGE_SIZE),
+        page: String(startupState.page),
+        page_size: String(startupState.pageSize),
       });
       const res = await fetch("/api/strategy/startup-list?" + params.toString());
       const json = await res.json();
       if (!json.ok) {
-        startupState.error = json.error || "启动策列加载失败";
-        updateInfiniteFooter(footerStartup, startupState);
+        startupState.total = 0;
+        listStartup.innerHTML =
+          '<div class="status-bar error">' +
+          (json.error || "启动策列加载失败") +
+          "</div>";
+        applyPagerUi(startupState, pagerStartupInfo, pagerStartupPrev, pagerStartupNext);
         return;
       }
       const items = json.items || [];
       startupState.total = json.total != null ? json.total : 0;
-      if (!append) {
-        listStartup.innerHTML = "";
-        startupState.page = 0;
-        startupState.loaded = 0;
+      const tp = totalPages(startupState.total, startupState.pageSize);
+      if (startupState.page > tp) {
+        startupState.page = Math.max(1, tp);
+        startupState.loading = false;
+        await fetchStartupList();
+        return;
       }
-      startupState.page = nextPage;
-      if (!items.length && !append) {
+      listStartup.innerHTML = "";
+      if (!items.length) {
         renderEmptyHint(listStartup, "startup");
-        startupState.done = true;
-        startupState.loaded = 0;
       } else {
-        if (!items.length) {
-          startupState.done = true;
-        } else {
-          const base = listStartup.querySelectorAll(".stock-item").length;
-          items.forEach((it, i) => {
-            listStartup.appendChild(makeStockItemEl(it, "startup", base + i));
-          });
-          startupState.loaded += items.length;
-          startupState.done = startupState.loaded >= startupState.total;
-        }
+        items.forEach((it, i) => {
+          listStartup.appendChild(makeStockItemEl(it, "startup", i));
+        });
       }
       refreshActiveHighlight();
     } catch (e) {
-      startupState.error = "请求失败";
+      startupState.total = 0;
+      listStartup.innerHTML =
+        '<div class="status-bar error">请求失败</div>';
     } finally {
       startupState.loading = false;
-      updateInfiniteFooter(footerStartup, startupState);
+      applyPagerUi(startupState, pagerStartupInfo, pagerStartupPrev, pagerStartupNext);
     }
   }
 
-  async function fetchSearchPage(append) {
-    if (searchState.loading || searchState.done) return;
+  async function fetchSearchList() {
     const q = searchState.query;
     if (!q || q.length < 1) return;
+    if (searchState.loading) return;
     searchState.loading = true;
-    searchState.error = null;
-    updateInfiniteFooter(footerSearch, searchState);
-    const nextPage = append ? searchState.page + 1 : 1;
+    searchState.pageSize =
+      parseInt(pagerSearchSize.value, 10) || 20;
+    applyPagerUi(searchState, pagerSearchInfo, pagerSearchPrev, pagerSearchNext);
     try {
       const params = new URLSearchParams({
         q: q,
-        page: String(nextPage),
-        page_size: String(PAGE_SIZE),
+        page: String(searchState.page),
+        page_size: String(searchState.pageSize),
       });
       const res = await fetch("/api/strategy/search?" + params.toString());
       const json = await res.json();
       if (!json.ok) {
-        searchState.error = json.error || "检索失败";
+        searchState.total = 0;
         listSearch.innerHTML =
           '<div class="status-bar error">' +
-          searchState.error +
+          (json.error || "检索失败") +
           "</div>";
-        searchState.done = true;
-        updateInfiniteFooter(footerSearch, searchState);
+        applyPagerUi(searchState, pagerSearchInfo, pagerSearchPrev, pagerSearchNext);
         return;
       }
       const items = json.items || [];
       searchState.total = json.total != null ? json.total : 0;
-      if (!append) {
-        listSearch.innerHTML = "";
-        searchState.page = 0;
-        searchState.loaded = 0;
+      const tp = totalPages(searchState.total, searchState.pageSize);
+      if (searchState.page > tp) {
+        searchState.page = Math.max(1, tp);
+        searchState.loading = false;
+        await fetchSearchList();
+        return;
       }
-      searchState.page = nextPage;
-      if (!items.length && !append) {
+      listSearch.innerHTML = "";
+      if (!items.length) {
         renderEmptyHint(listSearch, "search");
-        searchState.done = true;
-        searchState.loaded = 0;
       } else {
-        if (!items.length) {
-          searchState.done = true;
-        } else {
-          const base = listSearch.querySelectorAll(".stock-item").length;
-          items.forEach((it, i) => {
-            listSearch.appendChild(makeStockItemEl(it, "search", base + i));
-          });
-          searchState.loaded += items.length;
-          searchState.done = searchState.loaded >= searchState.total;
-        }
+        items.forEach((it, i) => {
+          listSearch.appendChild(makeStockItemEl(it, "search", i));
+        });
       }
       refreshActiveHighlight();
     } catch (e) {
-      searchState.error = "请求失败";
+      searchState.total = 0;
       listSearch.innerHTML =
         '<div class="status-bar error">请求失败</div>';
-      searchState.done = true;
     } finally {
       searchState.loading = false;
-      updateInfiniteFooter(footerSearch, searchState);
+      applyPagerUi(searchState, pagerSearchInfo, pagerSearchPrev, pagerSearchNext);
     }
   }
 
@@ -661,98 +633,100 @@
     });
   }
 
-  function bindInfiniteScroll(scrollEl, sentinelEl, footerEl, streamState, fetchPage) {
-    if (!scrollEl || !sentinelEl) return;
-    const io = new IntersectionObserver(
-      function (entries) {
-        entries.forEach(function (en) {
-          if (!en.isIntersecting) return;
-          if (streamState.loading || streamState.done) return;
-          fetchPage(true);
-        });
-      },
-      { root: scrollEl, rootMargin: "100px", threshold: 0 }
-    );
-    io.observe(sentinelEl);
-    updateInfiniteFooter(footerEl, streamState);
-    return io;
-  }
-
-  let ioPullup = null;
-  let ioStartup = null;
-  let ioSearch = null;
-
-  function setupObservers() {
-    if (ioPullup) ioPullup.disconnect();
-    if (ioStartup) ioStartup.disconnect();
-    if (ioSearch) ioSearch.disconnect();
-    ioPullup = bindInfiniteScroll(
-      scrollPullup,
-      sentinelPullup,
-      footerPullup,
-      pullupState,
-      fetchPullupPage
-    );
-    ioStartup = bindInfiniteScroll(
-      scrollStartup,
-      sentinelStartup,
-      footerStartup,
-      startupState,
-      fetchStartupPage
-    );
-    ioSearch = bindInfiniteScroll(
-      scrollSearch,
-      sentinelSearch,
-      footerSearch,
-      searchState,
-      fetchSearchPage
-    );
-  }
-
   async function enterSearchMode(q) {
     sidebarNormal.setAttribute("hidden", "");
     sidebarSearch.removeAttribute("hidden");
     searchPanelTitle.textContent =
       "检索结果（清空检索框恢复策列列表）";
-    resetStreamState(searchState);
     searchState.query = q;
+    searchState.page = 1;
+    searchState.pageSize =
+      parseInt(pagerSearchSize.value, 10) || 20;
     listSearch.innerHTML = "";
-    updateInfiniteFooter(footerSearch, searchState);
-    /* 检索面板默认长期 hidden，root 无布局；展开后强制重排并重建 IO，避免折叠手风琴后检索区高度为 0 或不刷新 */
     void sidebarSearch.offsetHeight;
-    if (ioSearch) ioSearch.disconnect();
-    ioSearch = bindInfiniteScroll(
-      scrollSearch,
-      sentinelSearch,
-      footerSearch,
-      searchState,
-      fetchSearchPage
-    );
-    await fetchSearchPage(false);
+    await fetchSearchList();
   }
 
   async function leaveSearchMode() {
     sidebarSearch.setAttribute("hidden", "");
     sidebarNormal.removeAttribute("hidden");
-    resetStreamState(pullupState);
-    resetStreamState(startupState);
+    pullupState.page = 1;
+    startupState.page = 1;
     listPullup.innerHTML = "";
     listStartup.innerHTML = "";
-    updateInfiniteFooter(footerPullup, pullupState);
-    updateInfiniteFooter(footerStartup, startupState);
-    await Promise.all([fetchPullupPage(false), fetchStartupPage(false)]);
+    await Promise.all([fetchPullupList(), fetchStartupList()]);
   }
 
   async function onSearchInputChanged() {
     const q = searchInput.value.trim();
     if (q.length >= 1) {
-      resetStreamState(searchState);
       searchState.query = q;
+      searchState.page = 1;
       await enterSearchMode(q);
     } else {
       await leaveSearchMode();
     }
   }
+
+  pagerPullupPrev.addEventListener("click", function () {
+    if (pullupState.page > 1) {
+      pullupState.page -= 1;
+      fetchPullupList();
+    }
+  });
+  pagerPullupNext.addEventListener("click", function () {
+    const tp = totalPages(pullupState.total, pullupState.pageSize);
+    if (pullupState.page < tp) {
+      pullupState.page += 1;
+      fetchPullupList();
+    }
+  });
+  pagerPullupSize.addEventListener("change", function () {
+    pullupState.pageSize =
+      parseInt(pagerPullupSize.value, 10) || 20;
+    pullupState.page = 1;
+    fetchPullupList();
+  });
+
+  pagerStartupPrev.addEventListener("click", function () {
+    if (startupState.page > 1) {
+      startupState.page -= 1;
+      fetchStartupList();
+    }
+  });
+  pagerStartupNext.addEventListener("click", function () {
+    const tp = totalPages(startupState.total, startupState.pageSize);
+    if (startupState.page < tp) {
+      startupState.page += 1;
+      fetchStartupList();
+    }
+  });
+  pagerStartupSize.addEventListener("change", function () {
+    startupState.pageSize =
+      parseInt(pagerStartupSize.value, 10) || 20;
+    startupState.page = 1;
+    fetchStartupList();
+  });
+
+  pagerSearchPrev.addEventListener("click", function () {
+    if (searchState.page > 1) {
+      searchState.page -= 1;
+      fetchSearchList();
+    }
+  });
+  pagerSearchNext.addEventListener("click", function () {
+    const tp = totalPages(searchState.total, searchState.pageSize);
+    if (searchState.page < tp) {
+      searchState.page += 1;
+      fetchSearchList();
+    }
+  });
+  pagerSearchSize.addEventListener("change", function () {
+    searchState.pageSize =
+      parseInt(pagerSearchSize.value, 10) || 20;
+    searchState.page = 1;
+    fetchSearchList();
+  });
 
   searchInput.addEventListener("input", function () {
     clearTimeout(searchTimer);
@@ -775,7 +749,6 @@
     chart.resize();
   });
 
-  setupObservers();
-  fetchPullupPage(false);
-  fetchStartupPage(false);
+  fetchPullupList();
+  fetchStartupList();
 })();

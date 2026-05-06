@@ -1,6 +1,21 @@
+/* 锁定视口高度，避免侧栏列表把页面撑高后只能滚 body */
+html.kline-dashboard-root {
+    height: 100%;
+}
+
+body.kline-dashboard-body {
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    box-sizing: border-box;
+}
+
 .layout-dashboard {
     display: flex;
-    min-height: calc(100vh - 0px);
+    height: 100vh;
+    max-height: 100vh;
+    min-height: 0;
+    overflow: hidden;
     background: #eef1f5;
 }
 
@@ -15,6 +30,9 @@
     padding: 1rem;
     gap: 0.75rem;
     min-height: 0;
+    flex-shrink: 0;
+    overflow: hidden;
+    box-sizing: border-box;
 }
 
 .sidebar-dash h2 {
@@ -68,6 +86,7 @@
     display: flex;
     flex-direction: column;
     min-height: 0;
+    overflow: hidden;
     gap: 0.5rem;
 }
 
@@ -76,6 +95,7 @@
     display: flex;
     flex-direction: column;
     min-height: 0;
+    overflow: hidden;
     gap: 0.45rem;
 }
 
@@ -88,6 +108,7 @@
     display: flex;
     flex-direction: column;
     min-height: 0;
+    overflow: hidden;
     gap: 0.35rem;
 }
 
@@ -100,6 +121,7 @@
     display: flex !important;
     flex: 1 1 0%;
     min-height: 12rem;
+    overflow: hidden;
 }
 
 .acc-block {
@@ -117,6 +139,7 @@
 .acc-block[open] {
     flex: 1 1 0%;
     min-height: 0;
+    overflow: hidden;
 }
 
 .acc-summary {
@@ -149,28 +172,41 @@
     content: "▸ ";
 }
 
-.acc-scroll {
-    flex: 1;
-    min-height: 120px;
-    /* 不在此处限高，由父级 flex 分配高度；折叠 sibling 后剩余高度会给展开区块 */
-    max-height: none;
-    overflow-y: auto;
-    padding: 0.4rem 0.45rem 0.35rem;
+/* 手风琴内容区：列表可滚，分页条固定在区块底部 */
+.acc-body {
+    flex: 1 1 0%;
+    min-height: 0;
+    overflow: hidden;
     display: flex;
     flex-direction: column;
-    gap: 0.35rem;
     background: #fff;
 }
 
-/* 检索模式：由侧栏 flex 分配高度，避免父级无高度时 max-height 把可视区域算没 */
-.acc-scroll.acc-scroll--search {
+.acc-scroll-list {
     flex: 1 1 0%;
     min-height: 0;
-    max-height: none;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    padding: 0.4rem 0.45rem 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.acc-body--search {
+    flex: 1 1 0%;
+    min-height: 0;
+}
+
+.acc-scroll-list--search {
+    flex: 1 1 0%;
+    min-height: 0;
 }
 
 .stock-list {
-    flex: 1;
+    flex: 0 0 auto;
     overflow-y: visible;
     display: flex;
     flex-direction: column;
@@ -182,24 +218,64 @@
     flex: 0 0 auto;
 }
 
-.infinite-footer {
+.list-pager {
     flex-shrink: 0;
-    font-size: 0.72rem;
-    color: #6b7280;
+    padding: 0.35rem 0.45rem 0.4rem;
+    border-top: 1px solid #e5e7eb;
+    font-size: 0.78rem;
+    color: #4b5563;
+    background: #fafbfc;
+}
+
+.pager-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.35rem;
+    margin-bottom: 0.35rem;
+}
+
+.pager-btn {
+    padding: 0.28rem 0.45rem;
+    font-size: 0.75rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    background: #fff;
+    cursor: pointer;
+    color: #374151;
+}
+
+.pager-btn:hover:not(:disabled) {
+    background: #f3f4f6;
+    border-color: #94a3b8;
+}
+
+.pager-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.pager-info {
+    flex: 1;
     text-align: center;
-    padding: 0.25rem 0 0.15rem;
-    line-height: 1.35;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.72rem;
 }
 
-.infinite-footer.error {
-    color: #b91c1c;
+.pager-size-row {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    justify-content: center;
 }
 
-.scroll-sentinel {
-    height: 1px;
-    width: 100%;
-    flex-shrink: 0;
-    pointer-events: none;
+.pager-select {
+    padding: 0.2rem 0.35rem;
+    font-size: 0.75rem;
+    border-radius: 6px;
+    border: 1px solid #cbd5e1;
 }
 
 .stock-item {
@@ -245,7 +321,12 @@
     display: flex;
     flex-direction: column;
     min-width: 0;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
     padding: 0.75rem 1rem 1rem;
+    box-sizing: border-box;
 }
 
 .chart-header {
