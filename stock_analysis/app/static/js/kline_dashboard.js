@@ -749,6 +749,21 @@
     chart.resize();
   });
 
+  /* 左侧不滚动时，在侧栏上滚轮仍驱动右侧 K 线区域滚动 */
+  const sidebarDash = document.querySelector(".sidebar-dash");
+  const mainDash = document.querySelector(".main-dash");
+  if (sidebarDash && mainDash) {
+    sidebarDash.addEventListener(
+      "wheel",
+      function (ev) {
+        if (Math.abs(ev.deltaY) < Math.abs(ev.deltaX)) return;
+        mainDash.scrollTop += ev.deltaY;
+        ev.preventDefault();
+      },
+      { passive: false }
+    );
+  }
+
   fetchPullupList();
   fetchStartupList();
 })();

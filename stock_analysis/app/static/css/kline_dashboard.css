@@ -33,6 +33,7 @@ body.kline-dashboard-body {
     flex-shrink: 0;
     overflow: hidden;
     box-sizing: border-box;
+    overscroll-behavior: none;
 }
 
 .sidebar-dash h2 {
@@ -172,7 +173,7 @@ body.kline-dashboard-body {
     content: "▸ ";
 }
 
-/* 手风琴内容区：列表可滚，分页条固定在区块底部 */
+/* 手风琴内容区：左侧列表不单独滚动（多余内容靠分页）；分页条固定在底部 */
 .acc-body {
     flex: 1 1 0%;
     min-height: 0;
@@ -186,9 +187,8 @@ body.kline-dashboard-body {
     flex: 1 1 0%;
     min-height: 0;
     overflow-x: hidden;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    -webkit-overflow-scrolling: touch;
+    overflow-y: hidden;
+    overscroll-behavior: none;
     padding: 0.4rem 0.45rem 0;
     display: flex;
     flex-direction: column;
@@ -325,6 +325,7 @@ body.kline-dashboard-body {
     overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
     padding: 0.75rem 1rem 1rem;
     box-sizing: border-box;
 }
