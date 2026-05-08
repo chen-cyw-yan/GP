@@ -1,5 +1,6 @@
 from flask import Blueprint, current_app, jsonify, request, render_template
 
+from .services.block_ranking import list_stock_linked_concept_blocks
 from .services.strategy_data import (
     build_kline_payload,
     get_strategy_frame,
@@ -20,6 +21,14 @@ def kline_dashboard():
 def _parse_page_args():
     page = request.args.get("page", default=1, type=int)
     page_size = request.args.get("page_size", default=20, type=int)
+    page = max(1, page)
+    page_size = max(1, min(page_size, 100))
+    return page, page_size
+
+
+def _parse_page_args_default_page_size(default_ps: int):
+    page = request.args.get("page", default=1, type=int)
+    page_size = request.args.get("page_size", default=default_ps, type=int)
     page = max(1, page)
     page_size = max(1, min(page_size, 100))
     return page, page_size
@@ -96,6 +105,26 @@ def api_search():
             "total": total,
         }
     )
+
+
+@strategy_bp.route("/api/strategy/concept-blocks")
+def api_concept_blocks():
+    """
+    当前个股的关联概念板块（按强弱度）+ 共振指数。
+    查询参数 code：侧栏股票代码，如 sh600000（与 block_analysis 计算一致）。
+    """
+    code = request.args.get("code", default="", type=str).strip()
+    page, page_size = _parse_page_args_default_page_size(10)
+    try:
+        data = list_stock_linked_concept_blocks(
+            current_app.config["DATABASE_URI"],
+            stock_code_raw=code,
+            page=page,
+            page_size=page_size,
+        )
+    except RuntimeError as e:
+        return jsonify({"ok": False, "error": str(e)}), 503
+    return jsonify({"ok": True, **data})
 
 
 @strategy_bp.route("/api/strategy/kline/<path:code>")

@@ -27,28 +27,45 @@
   const pagerSearchInfo = document.getElementById("pager-search-info");
   const pagerSearchSize = document.getElementById("pager-search-size");
 
+  const blockRankTbody = document.getElementById("block-rank-tbody");
+  const blockRankDate = document.getElementById("block-rank-date");
+  const blockResonance = document.getElementById("block-resonance");
+  const pagerBlockPrev = document.getElementById("pager-block-prev");
+  const pagerBlockNext = document.getElementById("pager-block-next");
+  const pagerBlockInfo = document.getElementById("pager-block-info");
+  const pagerBlockSize = document.getElementById("pager-block-size");
+
   let chart = echarts.init(chartDom, null, { renderer: "canvas" });
   let activeCode = null;
   let searchTimer = null;
 
   const pullupState = {
     page: 1,
-    pageSize: parseInt(pagerPullupSize.value, 10) || 20,
+    pageSize: parseInt(pagerPullupSize.value, 10) || 10,
     total: 0,
     loading: false,
   };
   const startupState = {
     page: 1,
-    pageSize: parseInt(pagerStartupSize.value, 10) || 20,
+    pageSize: parseInt(pagerStartupSize.value, 10) || 10,
     total: 0,
     loading: false,
   };
   const searchState = {
     page: 1,
-    pageSize: parseInt(pagerSearchSize.value, 10) || 20,
+    pageSize: parseInt(pagerSearchSize.value, 10) || 10,
     total: 0,
     loading: false,
     query: "",
+  };
+
+  const blockRankState = {
+    page: 1,
+    pageSize: pagerBlockSize
+      ? parseInt(pagerBlockSize.value, 10) || 10
+      : 10,
+    total: 0,
+    loading: false,
   };
 
   function setStatus(msg, isErr) {
@@ -380,6 +397,8 @@
       document.querySelectorAll(".stock-item").forEach((el) => {
         el.classList.toggle("active", el.dataset.code === code);
       });
+      blockRankState.page = 1;
+      fetchBlockRank(code);
     } catch (e) {
       setStatus("网络错误: " + e.message, true);
     }
@@ -457,6 +476,166 @@
     return div;
   }
 
+  function fmtDashNum(v, digits) {
+    if (v == null || Number.isNaN(Number(v))) return "—";
+    return Number(v).toFixed(digits);
+  }
+
+  function fmtDashInt(v) {
+    if (v == null || Number.isNaN(Number(v))) return "—";
+    return Number(v).toLocaleString("zh-CN");
+  }
+
+  function renderBlockRankRows(items, emptyHint) {
+    if (!blockRankTbody) return;
+    blockRankTbody.innerHTML = "";
+    if (!items.length) {
+      const tr = document.createElement("tr");
+      const td = document.createElement("td");
+      td.colSpan = 10;
+      td.className = "block-rank-empty";
+      td.textContent =
+        emptyHint ||
+        "该股暂无关联概念板块行情（请检查 tdx_block_stocks / tdx_block_daily）";
+      tr.appendChild(td);
+      blockRankTbody.appendChild(tr);
+      return;
+    }
+    function addCell(tr, text) {
+      const td = document.createElement("td");
+      td.textContent = text;
+      tr.appendChild(td);
+    }
+    items.forEach(function (it) {
+      const tr = document.createElement("tr");
+      addCell(tr, it.name || it.code || "—");
+      addCell(tr, fmtDashNum(it.strength, 2));
+      addCell(tr, fmtDashNum(it.change_pct, 2));
+      addCell(
+        tr,
+        it.up_down_count != null ? String(it.up_down_count) : "—"
+      );
+      addCell(tr, fmtDashNum(it.turnover, 2));
+      addCell(tr, fmtDashNum(it.main_net_ratio, 2));
+      addCell(tr, fmtDashInt(it.total_volume));
+      addCell(tr, fmtDashNum(it.total_amount, 2));
+      addCell(tr, fmtDashNum(it.amplitude, 2));
+      addCell(
+        tr,
+        it.short_trend_label != null && it.short_trend_label !== ""
+          ? String(it.short_trend_label)
+          : "—"
+      );
+      blockRankTbody.appendChild(tr);
+    });
+  }
+
+  async function fetchBlockRank(optStockCode) {
+    if (!blockRankTbody || !pagerBlockPrev) return;
+    var stockCode =
+      optStockCode !== undefined && optStockCode !== null
+        ? optStockCode
+        : activeCode;
+    stockCode = stockCode ? String(stockCode).trim() : "";
+
+    if (!stockCode) {
+      blockRankState.total = 0;
+      blockRankState.loading = false;
+      if (blockRankDate) blockRankDate.textContent = "—";
+      if (blockResonance) blockResonance.textContent = "—";
+      renderBlockRankRows(
+        [],
+        "请先点击左侧个股；下方表格为该股的关联概念板块（按强弱度排序），右上角为该股的概念板块共振指数。"
+      );
+      applyPagerUi(
+        blockRankState,
+        pagerBlockInfo,
+        pagerBlockPrev,
+        pagerBlockNext
+      );
+      return;
+    }
+
+    if (blockRankState.loading) return;
+    blockRankState.loading = true;
+    blockRankState.pageSize =
+      parseInt(pagerBlockSize.value, 10) || 10;
+    applyPagerUi(
+      blockRankState,
+      pagerBlockInfo,
+      pagerBlockPrev,
+      pagerBlockNext
+    );
+    try {
+      const params = new URLSearchParams({
+        code: stockCode,
+        page: String(blockRankState.page),
+        page_size: String(blockRankState.pageSize),
+      });
+      const res = await fetch(
+        "/api/strategy/concept-blocks?" + params.toString()
+      );
+      const json = await res.json();
+      if (!json.ok) {
+        blockRankState.total = 0;
+        if (blockRankDate) blockRankDate.textContent = "—";
+        if (blockResonance) blockResonance.textContent = "—";
+        if (blockRankTbody) {
+          blockRankTbody.innerHTML = "";
+          const tr = document.createElement("tr");
+          const td = document.createElement("td");
+          td.colSpan = 10;
+          td.className = "block-rank-empty";
+          td.textContent = json.error || "加载失败";
+          tr.appendChild(td);
+          blockRankTbody.appendChild(tr);
+        }
+        applyPagerUi(
+          blockRankState,
+          pagerBlockInfo,
+          pagerBlockPrev,
+          pagerBlockNext
+        );
+        return;
+      }
+      if (blockRankDate) {
+        blockRankDate.textContent = json.trade_date || "—";
+      }
+      if (blockResonance) {
+        if (json.resonance_index != null && json.resonance_index !== "") {
+          blockResonance.textContent = Number(json.resonance_index).toFixed(
+            4
+          );
+        } else {
+          blockResonance.textContent = "—";
+        }
+      }
+      const items = json.items || [];
+      blockRankState.total = json.total != null ? json.total : 0;
+      const tp = totalPages(blockRankState.total, blockRankState.pageSize);
+      if (blockRankState.page > tp) {
+        blockRankState.page = Math.max(1, tp);
+        blockRankState.loading = false;
+        await fetchBlockRank(stockCode);
+        return;
+      }
+      renderBlockRankRows(items, json.hint);
+    } catch (e) {
+      blockRankState.total = 0;
+      if (blockRankDate) blockRankDate.textContent = "—";
+      if (blockResonance) blockResonance.textContent = "—";
+      renderBlockRankRows([], "请求失败：" + e.message);
+    } finally {
+      blockRankState.loading = false;
+      applyPagerUi(
+        blockRankState,
+        pagerBlockInfo,
+        pagerBlockPrev,
+        pagerBlockNext
+      );
+    }
+  }
+
   function renderEmptyHint(container, mode) {
     container.innerHTML =
       '<div class="status-bar">' +
@@ -472,7 +651,7 @@
     if (pullupState.loading) return;
     pullupState.loading = true;
     pullupState.pageSize =
-      parseInt(pagerPullupSize.value, 10) || 20;
+      parseInt(pagerPullupSize.value, 10) || 10;
     applyPagerUi(pullupState, pagerPullupInfo, pagerPullupPrev, pagerPullupNext);
     try {
       const params = new URLSearchParams({
@@ -527,7 +706,7 @@
     if (startupState.loading) return;
     startupState.loading = true;
     startupState.pageSize =
-      parseInt(pagerStartupSize.value, 10) || 20;
+      parseInt(pagerStartupSize.value, 10) || 10;
     applyPagerUi(startupState, pagerStartupInfo, pagerStartupPrev, pagerStartupNext);
     try {
       const params = new URLSearchParams({
@@ -579,7 +758,7 @@
     if (searchState.loading) return;
     searchState.loading = true;
     searchState.pageSize =
-      parseInt(pagerSearchSize.value, 10) || 20;
+      parseInt(pagerSearchSize.value, 10) || 10;
     applyPagerUi(searchState, pagerSearchInfo, pagerSearchPrev, pagerSearchNext);
     try {
       const params = new URLSearchParams({
@@ -641,7 +820,7 @@
     searchState.query = q;
     searchState.page = 1;
     searchState.pageSize =
-      parseInt(pagerSearchSize.value, 10) || 20;
+      parseInt(pagerSearchSize.value, 10) || 10;
     listSearch.innerHTML = "";
     void sidebarSearch.offsetHeight;
     await fetchSearchList();
@@ -683,7 +862,7 @@
   });
   pagerPullupSize.addEventListener("change", function () {
     pullupState.pageSize =
-      parseInt(pagerPullupSize.value, 10) || 20;
+      parseInt(pagerPullupSize.value, 10) || 10;
     pullupState.page = 1;
     fetchPullupList();
   });
@@ -703,7 +882,7 @@
   });
   pagerStartupSize.addEventListener("change", function () {
     startupState.pageSize =
-      parseInt(pagerStartupSize.value, 10) || 20;
+      parseInt(pagerStartupSize.value, 10) || 10;
     startupState.page = 1;
     fetchStartupList();
   });
@@ -723,7 +902,7 @@
   });
   pagerSearchSize.addEventListener("change", function () {
     searchState.pageSize =
-      parseInt(pagerSearchSize.value, 10) || 20;
+      parseInt(pagerSearchSize.value, 10) || 10;
     searchState.page = 1;
     fetchSearchList();
   });
@@ -749,21 +928,31 @@
     chart.resize();
   });
 
-  /* 左侧不滚动时，在侧栏上滚轮仍驱动右侧 K 线区域滚动 */
-  const sidebarDash = document.querySelector(".sidebar-dash");
-  const mainDash = document.querySelector(".main-dash");
-  if (sidebarDash && mainDash) {
-    sidebarDash.addEventListener(
-      "wheel",
-      function (ev) {
-        if (Math.abs(ev.deltaY) < Math.abs(ev.deltaX)) return;
-        mainDash.scrollTop += ev.deltaY;
-        ev.preventDefault();
-      },
-      { passive: false }
-    );
+  if (pagerBlockPrev && pagerBlockNext) {
+    pagerBlockPrev.addEventListener("click", function () {
+      if (blockRankState.page > 1) {
+        blockRankState.page -= 1;
+        fetchBlockRank();
+      }
+    });
+    pagerBlockNext.addEventListener("click", function () {
+      const tp = totalPages(blockRankState.total, blockRankState.pageSize);
+      if (blockRankState.page < tp) {
+        blockRankState.page += 1;
+        fetchBlockRank();
+      }
+    });
+  }
+  if (pagerBlockSize) {
+    pagerBlockSize.addEventListener("change", function () {
+      blockRankState.pageSize =
+        parseInt(pagerBlockSize.value, 10) || 10;
+      blockRankState.page = 1;
+      fetchBlockRank();
+    });
   }
 
   fetchPullupList();
   fetchStartupList();
+  fetchBlockRank();
 })();

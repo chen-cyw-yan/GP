@@ -42,8 +42,8 @@
                                 <div class="pager-size-row">
                                     <label for="pager-pullup-size">每页</label>
                                     <select id="pager-pullup-size" class="pager-select">
-                                        <option value="10">10</option>
-                                        <option value="20" selected>20</option>
+                                        <option value="10" selected>10</option>
+                                        <option value="20">20</option>
                                         <option value="50">50</option>
                                     </select>
                                     <span>条</span>
@@ -66,8 +66,8 @@
                                 <div class="pager-size-row">
                                     <label for="pager-startup-size">每页</label>
                                     <select id="pager-startup-size" class="pager-select">
-                                        <option value="10">10</option>
-                                        <option value="20" selected>20</option>
+                                        <option value="10" selected>10</option>
+                                        <option value="20">20</option>
                                         <option value="50">50</option>
                                     </select>
                                     <span>条</span>
@@ -91,8 +91,8 @@
                             <div class="pager-size-row">
                                 <label for="pager-search-size">每页</label>
                                 <select id="pager-search-size" class="pager-select">
-                                    <option value="10">10</option>
-                                    <option value="20" selected>20</option>
+                                    <option value="10" selected>10</option>
+                                    <option value="20">20</option>
                                     <option value="50">50</option>
                                 </select>
                                 <span>条</span>
@@ -112,6 +112,51 @@
                 <div id="chart-main"></div>
             </div>
             <div class="status-bar" id="chart-status"></div>
+
+            <section class="block-rank-section" aria-labelledby="block-rank-title">
+                <div class="block-rank-head">
+                    <h3 id="block-rank-title">个股关联概念板块</h3>
+                    <div class="block-rank-meta">
+                        <span class="block-rank-date-wrap">数据日期 <strong id="block-rank-date">—</strong></span>
+                        <span class="block-resonance-wrap">个股对应板块共振指数 <strong id="block-resonance">—</strong></span>
+                    </div>
+                </div>
+                <div class="block-rank-table-scroll">
+                    <table class="block-rank-table">
+                        <thead>
+                            <tr>
+                                <th>板块名称</th>
+                                <th>强弱度</th>
+                                <th>涨幅</th>
+                                <th>涨跌数</th>
+                                <th>换手</th>
+                                <th>主力净比</th>
+                                <th>成交量</th>
+                                <th>成交额</th>
+                                <th>振幅</th>
+                                <th>短期形态</th>
+                            </tr>
+                        </thead>
+                        <tbody id="block-rank-tbody"></tbody>
+                    </table>
+                </div>
+                <div class="list-pager block-rank-pager">
+                    <div class="pager-row">
+                        <button type="button" class="pager-btn" id="pager-block-prev">上一页</button>
+                        <span class="pager-info" id="pager-block-info">—</span>
+                        <button type="button" class="pager-btn" id="pager-block-next">下一页</button>
+                    </div>
+                    <div class="pager-size-row">
+                        <label for="pager-block-size">每页</label>
+                        <select id="pager-block-size" class="pager-select">
+                            <option value="10" selected>10</option>
+                            <option value="20">20</option>
+                            <option value="50">50</option>
+                        </select>
+                        <span>条</span>
+                    </div>
+                </div>
+            </section>
         </main>
     </div>
 

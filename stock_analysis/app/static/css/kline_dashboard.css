@@ -1,21 +1,18 @@
-/* 锁定视口高度，避免侧栏列表把页面撑高后只能滚 body */
+/* 整页随内容增高，由浏览器默认滚动；不再锁定视口 */
 html.kline-dashboard-root {
-    height: 100%;
+    box-sizing: border-box;
 }
 
 body.kline-dashboard-body {
-    height: 100%;
     margin: 0;
-    overflow: hidden;
     box-sizing: border-box;
+    min-height: 100vh;
 }
 
 .layout-dashboard {
     display: flex;
-    height: 100vh;
-    max-height: 100vh;
-    min-height: 0;
-    overflow: hidden;
+    align-items: flex-start;
+    min-height: 100vh;
     background: #eef1f5;
 }
 
@@ -29,11 +26,8 @@ body.kline-dashboard-body {
     flex-direction: column;
     padding: 1rem;
     gap: 0.75rem;
-    min-height: 0;
     flex-shrink: 0;
-    overflow: hidden;
     box-sizing: border-box;
-    overscroll-behavior: none;
 }
 
 .sidebar-dash h2 {
@@ -83,20 +77,14 @@ body.kline-dashboard-body {
 }
 
 .list-panel {
-    flex: 1;
     display: flex;
     flex-direction: column;
-    min-height: 0;
-    overflow: hidden;
     gap: 0.5rem;
 }
 
 #sidebar-normal {
-    flex: 1;
     display: flex;
     flex-direction: column;
-    min-height: 0;
-    overflow: hidden;
     gap: 0.45rem;
 }
 
@@ -105,11 +93,8 @@ body.kline-dashboard-body {
 }
 
 #sidebar-search {
-    flex: 1 1 0%;
     display: flex;
     flex-direction: column;
-    min-height: 0;
-    overflow: hidden;
     gap: 0.35rem;
 }
 
@@ -117,12 +102,10 @@ body.kline-dashboard-body {
     display: none !important;
 }
 
-/* 从长期 hidden 显示出来后，保证占有 list-panel 剩余高度（避免高度为 0 看不到结果） */
+/* 从长期 hidden 显示出来后仍保持侧栏 flex 布局 */
 #sidebar-search:not([hidden]) {
     display: flex !important;
-    flex: 1 1 0%;
     min-height: 12rem;
-    overflow: hidden;
 }
 
 .acc-block {
@@ -136,10 +119,7 @@ body.kline-dashboard-body {
     flex-direction: column;
 }
 
-/* 仅展开的手风琴参与分配侧栏剩余高度，下方区块会顶上来 */
 .acc-block[open] {
-    flex: 1 1 0%;
-    min-height: 0;
     overflow: hidden;
 }
 
@@ -173,36 +153,20 @@ body.kline-dashboard-body {
     content: "▸ ";
 }
 
-/* 手风琴内容区：左侧列表不单独滚动（多余内容靠分页）；分页条固定在底部 */
+/* 手风琴内容区：列表随内容增高，整页滚动 */
 .acc-body {
-    flex: 1 1 0%;
-    min-height: 0;
-    overflow: hidden;
     display: flex;
     flex-direction: column;
     background: #fff;
 }
 
 .acc-scroll-list {
-    flex: 1 1 0%;
-    min-height: 0;
     overflow-x: hidden;
-    overflow-y: hidden;
-    overscroll-behavior: none;
+    overflow-y: visible;
     padding: 0.4rem 0.45rem 0;
     display: flex;
     flex-direction: column;
     gap: 0.35rem;
-}
-
-.acc-body--search {
-    flex: 1 1 0%;
-    min-height: 0;
-}
-
-.acc-scroll-list--search {
-    flex: 1 1 0%;
-    min-height: 0;
 }
 
 .stock-list {
@@ -321,11 +285,6 @@ body.kline-dashboard-body {
     display: flex;
     flex-direction: column;
     min-width: 0;
-    min-height: 0;
-    overflow-x: hidden;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    -webkit-overflow-scrolling: touch;
     padding: 0.75rem 1rem 1rem;
     box-sizing: border-box;
 }
@@ -371,4 +330,96 @@ body.kline-dashboard-body {
 
 .status-bar.error {
     color: #b91c1c;
+}
+
+/* 概念板块排行榜（K 线下方） */
+.block-rank-section {
+    margin-top: 1rem;
+    padding: 0.75rem 0 0;
+    border-top: 1px solid #e5e7eb;
+}
+
+.block-rank-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.5rem 1rem;
+    margin-bottom: 0.5rem;
+}
+
+.block-rank-head h3 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #111827;
+}
+
+.block-rank-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem 1.25rem;
+    font-size: 0.82rem;
+    color: #4b5563;
+}
+
+.block-rank-meta strong {
+    color: #059669;
+    font-weight: 600;
+}
+
+.block-rank-table-scroll {
+    overflow-x: auto;
+    border: 1px solid #22c55e;
+    border-radius: 10px;
+    background: #fafdfb;
+}
+
+.block-rank-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.78rem;
+    color: #1f2937;
+    white-space: nowrap;
+}
+
+.block-rank-table th,
+.block-rank-table td {
+    padding: 0.45rem 0.55rem;
+    text-align: right;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.block-rank-table th:first-child,
+.block-rank-table td:first-child {
+    text-align: left;
+    position: sticky;
+    left: 0;
+    background: #fafdfb;
+    z-index: 1;
+    box-shadow: 4px 0 8px -4px rgba(0, 0, 0, 0.08);
+}
+
+.block-rank-table thead th {
+    background: #ecfdf5;
+    font-weight: 600;
+    color: #065f46;
+    border-bottom: 1px solid #bbf7d0;
+}
+
+.block-rank-table tbody tr:hover {
+    background: #f0fdf4;
+}
+
+.block-rank-pager {
+    margin-top: 0.45rem;
+    border-radius: 8px;
+    border: 1px solid #e5e7eb;
+}
+
+.block-rank-table td.block-rank-empty {
+    text-align: center;
+    white-space: normal;
+    color: #6b7280;
+    padding: 1rem;
 }
