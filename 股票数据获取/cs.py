@@ -1,3 +1,5 @@
 import akshare as ak
-df=ak.stock_zh_a_spot_em()
+stock_zh_a_spot_em_df = ak.stock_zh_a_spot()
+df=stock_zh_a_spot_em_df
+print(df.columns)
 print(df)

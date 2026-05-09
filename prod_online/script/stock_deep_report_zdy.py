@@ -45,7 +45,7 @@ logger.info(f"当前任务日期: {today_str}")
 engine = create_engine("mysql+pymysql://root:chen@127.0.0.1:3306/gp")
 if not utils.is_trading_day_ak(today_str):
     logger.warning(f"⚠️ {today_str} 不是 A 股交易日，程序安全退出。")
-    sys.exit(0)
+    # sys.exit(0)
 # ================= 配置 Matplotlib 中文显示 =================
 def setup_matplotlib_font():
     """自动设置适合当前操作系统的中文字体"""
@@ -725,11 +725,11 @@ def main():
         "stock_code": "sz002851",
         "stock_name": "麦格米特"
     },{
-        "stock_code": "sh603327",
-        "stock_name": "福蓉科技"
+        "stock_code": "sh600552",
+        "stock_name": "中天科技"
     },{
-        "stock_code": "sz002545",
-        "stock_name": "东方铁塔"
+        "stock_code": "sh600776",
+        "stock_name": "东方通信"
     }])
 
 
