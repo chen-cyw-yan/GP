@@ -65,6 +65,23 @@ def toSql(sql: str, rows: list):
 # print(stock_zh_a_spot_em_df)
 
 
+def fetch_last_outstanding_share(engine, before_date: str) -> pd.DataFrame:
+    """取各股票在 before_date 之前、outstanding_share 非零的最后一条记录的流通股本（万股）。"""
+    sql = """
+    SELECT s.code, s.outstanding_share
+    FROM gp.stock s
+    INNER JOIN (
+        SELECT code, MAX(date) AS max_d
+        FROM gp.stock
+        WHERE date < %(before_date)s
+          AND outstanding_share IS NOT NULL
+          AND outstanding_share != 0
+        GROUP BY code
+    ) t ON s.code = t.code AND s.date = t.max_d
+    """
+    return pd.read_sql(sql, con=engine, params={"before_date": before_date})
+
+
 def get_today_data():
     stock_zh_a_spot_em_df = ak.stock_zh_a_spot()
     df=stock_zh_a_spot_em_df
@@ -91,8 +108,21 @@ def main():
     today_data_df=today_data_df[["代码","名称","最新价","今开","最高","最低","成交量","成交额"]]
     today_data_df=today_data_df.rename(columns={"代码":"code","名称":"name", "最新价":"close" ,"今开":"open","最高":"high", "最低":"low", "成交量":"volume", "成交额":"amount"})
     today_data_df['date']= today.strftime("%Y-%m-%d")
-    today_data_df['outstanding_share']=0
-    today_data_df['turnover']=0
+    last_share_df = fetch_last_outstanding_share(con, today_str)
+    today_data_df = today_data_df.merge(last_share_df, on="code", how="left")
+    today_data_df["outstanding_share"] = pd.to_numeric(
+        today_data_df["outstanding_share"], errors="coerce"
+    ).fillna(0.0)
+    vol = pd.to_numeric(today_data_df["volume"], errors="coerce").fillna(0.0)
+    # 成交量（手）、流通股本（万股）→ 换手率（%）= (手×100股)/(万股×10000股)×100 = volume/outstanding_share
+    today_data_df["turnover"] = np.where(
+        today_data_df["outstanding_share"] > 0,
+        vol / today_data_df["outstanding_share"],
+        0.0,
+    )
+    no_share = int((today_data_df["outstanding_share"] <= 0).sum())
+    if no_share:
+        logger.warning(f"共 {no_share} 只股票在库中无历史流通股本，换手率记为 0")
     print(today_data_df)
     sql = f"REPLACE INTO gp.stock(`{'`,`'.join(today_data_df.columns)}`) VALUES ({','.join(['%s' for _ in range(today_data_df.shape[1])])})"
     toSql(sql=sql, rows=today_data_df.values.tolist())

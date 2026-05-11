@@ -1,5 +1,12 @@
-import akshare as ak
-stock_zh_a_spot_em_df = ak.stock_zh_a_spot()
-df=stock_zh_a_spot_em_df
-print(df.columns)
+from mootdx.quotes import Quotes
+
+client = Quotes.factory(market='std')
+
+df = client.bars(
+    symbol='sz000815',
+    frequency=1,
+    offset=0,
+    count=10
+)
+
 print(df)

@@ -251,7 +251,7 @@ def plot_html(code, df, saving_dir, date='2026-04-24'):
 # ==========================
 # 6️⃣ 主流程
 # ==========================
-def main(add_codes=[],turnover_min=5.0,date='2026-04-29'):
+def main(add_codes=[],turnover_min=5.0,date='2026-05-11'):
 
     engine = create_engine("mysql+pymysql://root:chen@127.0.0.1:3306/gp")
     logger.info("="*30 + " 加载数据 " + "="*30)
@@ -267,21 +267,15 @@ def main(add_codes=[],turnover_min=5.0,date='2026-04-29'):
     df=df.loc[is_main_board]
 
     code_ls=[
-            "sh600338",
-            "sh603931",
-            "sz300582",
-            "sz300283",
-            "sh603066",
-            "sh603338",
-            "sz300290"
+        'sz000815'
             ]
 
-
+    print(df)
     date = pd.to_datetime(date)
     # turnover_min = 5.0
     day_df = df.loc[
        (df['date'] == date) &
-       (df['turnover'] >= turnover_min) &
+    #    (df['turnover'] >= turnover_min) &
         ((df['buy_signal'])  |
           (df['code'].isin(code_ls)))
     ]

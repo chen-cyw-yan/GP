@@ -18,7 +18,7 @@ engine = create_engine(
 # =========================
 # 参数
 # =========================
-TARGET_CODE = 'sh600776'
+TARGET_CODE = 'sz000815'
 WINDOW = 30
 TOP_N = 10
 
