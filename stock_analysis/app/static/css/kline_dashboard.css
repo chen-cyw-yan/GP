@@ -263,8 +263,27 @@ body.kline-dashboard-body {
     border-color: #2563eb;
 }
 
+.stock-item-name-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.35rem;
+}
+
 .stock-item .name {
     font-weight: 600;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.stock-mv {
+    font-size: 0.72rem;
+    font-weight: 500;
+    color: #64748b;
+    flex-shrink: 0;
 }
 
 .stock-item .meta {

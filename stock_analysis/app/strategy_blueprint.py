@@ -6,6 +6,7 @@ from .services.strategy_data import (
     get_strategy_frame,
     invalidate_strategy_cache,
     list_buy_signals_recent,
+    list_recent_spike_multi,
     list_stock_analysis_startup,
     strategy_search_stocks,
 )
@@ -64,15 +65,53 @@ def api_buy_signals():
     )
 
 
+@strategy_bp.route("/api/strategy/recent-spike")
+def api_recent_spike():
+    """近期试盘：近 N 个交易日试盘日 ≥ M 次（默认 7 日、2 次）。"""
+    recent_days = request.args.get("recent_days", default=7, type=int)
+    min_spikes = request.args.get("min_spikes", default=2, type=int)
+    page, page_size = _parse_page_args()
+    recent_days = max(1, min(recent_days, 250))
+    min_spikes = max(2, min(min_spikes, 50))
+    try:
+        df = get_strategy_frame(current_app.config["DATABASE_URI"])
+    except RuntimeError as e:
+        return jsonify({"ok": False, "error": str(e)}), 503
+    items, total = list_recent_spike_multi(
+        df,
+        recent_trading_days=recent_days,
+        min_spike_count=min_spikes,
+        page=page,
+        page_size=page_size,
+    )
+    return jsonify(
+        {
+            "ok": True,
+            "items": items,
+            "page": page,
+            "page_size": page_size,
+            "total": total,
+            "recent_days": recent_days,
+            "min_spikes": min_spikes,
+        }
+    )
+
+
 @strategy_bp.route("/api/strategy/startup-list")
 def api_startup_list():
     """启动策列：stock_analysis.need_to_analysis = '1'"""
     page, page_size = _parse_page_args()
+    strategy_df = None
+    try:
+        strategy_df = get_strategy_frame(current_app.config["DATABASE_URI"])
+    except RuntimeError:
+        strategy_df = None
     try:
         items, total = list_stock_analysis_startup(
             current_app.config["DATABASE_URI"],
             page=page,
             page_size=page_size,
+            strategy_df=strategy_df,
         )
     except RuntimeError as e:
         return jsonify({"ok": False, "error": str(e)}), 503

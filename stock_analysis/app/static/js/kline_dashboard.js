@@ -9,6 +9,7 @@
   const sidebarSearch = document.getElementById("sidebar-search");
   const searchPanelTitle = document.getElementById("search-panel-title");
   const listPullup = document.getElementById("list-pullup");
+  const listRecentSpike = document.getElementById("list-recent-spike");
   const listStartup = document.getElementById("list-startup");
   const listSearch = document.getElementById("list-search");
 
@@ -16,6 +17,19 @@
   const pagerPullupNext = document.getElementById("pager-pullup-next");
   const pagerPullupInfo = document.getElementById("pager-pullup-info");
   const pagerPullupSize = document.getElementById("pager-pullup-size");
+
+  const pagerRecentSpikePrev = document.getElementById(
+    "pager-recent-spike-prev"
+  );
+  const pagerRecentSpikeNext = document.getElementById(
+    "pager-recent-spike-next"
+  );
+  const pagerRecentSpikeInfo = document.getElementById(
+    "pager-recent-spike-info"
+  );
+  const pagerRecentSpikeSize = document.getElementById(
+    "pager-recent-spike-size"
+  );
 
   const pagerStartupPrev = document.getElementById("pager-startup-prev");
   const pagerStartupNext = document.getElementById("pager-startup-next");
@@ -48,6 +62,15 @@
   const startupState = {
     page: 1,
     pageSize: parseInt(pagerStartupSize.value, 10) || 10,
+    total: 0,
+    loading: false,
+  };
+  const recentSpikeState = {
+    page: 1,
+    pageSize:
+      pagerRecentSpikeSize && parseInt(pagerRecentSpikeSize.value, 10)
+        ? parseInt(pagerRecentSpikeSize.value, 10)
+        : 10,
     total: 0,
     loading: false,
   };
@@ -413,6 +436,30 @@
     return " · 换手 " + Number(v).toFixed(2) + "%";
   }
 
+  function escapeHtml(text) {
+    const d = document.createElement("div");
+    d.textContent = text;
+    return d.innerHTML;
+  }
+
+  function stockNameRowHtml(it) {
+    const mv = it.market_cap_display;
+    const mvPart =
+      mv != null && String(mv).length
+        ? '<span class="stock-mv" title="市值">' +
+          escapeHtml(String(mv)) +
+          "</span>"
+        : "";
+    return (
+      '<div class="stock-item-name-row">' +
+      '<span class="name">' +
+      escapeHtml(String(it.name || it.code || "")) +
+      "</span>" +
+      mvPart +
+      "</div>"
+    );
+  }
+
   function totalPages(total, pageSize) {
     if (total <= 0) return 1;
     return Math.ceil(total / pageSize);
@@ -453,6 +500,20 @@
         " · 日期 " +
         (it.date || "-") +
         (hint ? " · " + hint : "");
+    } else if (mode === "recentSpike") {
+      const w =
+        it.recent_window_days != null ? String(it.recent_window_days) : "7";
+      const n =
+        it.spike_count != null ? String(it.spike_count) : "?";
+      meta =
+        it.code +
+        " · 近" +
+        w +
+        "日试盘 " +
+        n +
+        "次 · 最近试盘 " +
+        (it.date || "-") +
+        turnoverLabel(it);
     } else {
       meta =
         it.code +
@@ -461,11 +522,7 @@
         turnoverLabel(it);
     }
     div.innerHTML =
-      '<div class="name">' +
-      (it.name || it.code) +
-      '</div><div class="meta">' +
-      meta +
-      "</div>";
+      stockNameRowHtml(it) + '<div class="meta">' + meta + "</div>";
     div.addEventListener("click", () => loadKline(it.code));
     div.addEventListener("keydown", function (ev) {
       if (ev.key === "Enter" || ev.key === " ") {
@@ -637,14 +694,16 @@
   }
 
   function renderEmptyHint(container, mode) {
-    container.innerHTML =
-      '<div class="status-bar">' +
-      (mode === "search"
+    let hint =
+      mode === "search"
         ? "未找到匹配股票，请换关键词或输入 sh600000 形式代码"
         : mode === "startup"
           ? "暂无 need_to_analysis=1 的记录"
-          : "近期暂无买入信号；可用上方检索任意标的查看K线") +
-      "</div>";
+          : mode === "recentSpike"
+            ? "近7个交易日内暂无出现2次及以上试盘日的标的"
+            : "近期暂无买入信号；可用上方检索任意标的查看K线";
+    container.innerHTML =
+      '<div class="status-bar">' + hint + "</div>";
   }
 
   async function fetchPullupList() {
@@ -699,6 +758,78 @@
     } finally {
       pullupState.loading = false;
       applyPagerUi(pullupState, pagerPullupInfo, pagerPullupPrev, pagerPullupNext);
+    }
+  }
+
+  async function fetchRecentSpikeList() {
+    if (!listRecentSpike || !pagerRecentSpikePrev) return;
+    if (recentSpikeState.loading) return;
+    recentSpikeState.loading = true;
+    recentSpikeState.pageSize =
+      parseInt(pagerRecentSpikeSize.value, 10) || 10;
+    applyPagerUi(
+      recentSpikeState,
+      pagerRecentSpikeInfo,
+      pagerRecentSpikePrev,
+      pagerRecentSpikeNext
+    );
+    try {
+      const params = new URLSearchParams({
+        recent_days: "7",
+        min_spikes: "2",
+        page: String(recentSpikeState.page),
+        page_size: String(recentSpikeState.pageSize),
+      });
+      const res = await fetch(
+        "/api/strategy/recent-spike?" + params.toString()
+      );
+      const json = await res.json();
+      if (!json.ok) {
+        recentSpikeState.total = 0;
+        listRecentSpike.innerHTML =
+          '<div class="status-bar error">' +
+          (json.error || "近期试盘列表加载失败") +
+          "</div>";
+        applyPagerUi(
+          recentSpikeState,
+          pagerRecentSpikeInfo,
+          pagerRecentSpikePrev,
+          pagerRecentSpikeNext
+        );
+        return;
+      }
+      const items = json.items || [];
+      recentSpikeState.total = json.total != null ? json.total : 0;
+      const tp = totalPages(recentSpikeState.total, recentSpikeState.pageSize);
+      if (recentSpikeState.page > tp) {
+        recentSpikeState.page = Math.max(1, tp);
+        recentSpikeState.loading = false;
+        await fetchRecentSpikeList();
+        return;
+      }
+      listRecentSpike.innerHTML = "";
+      if (!items.length) {
+        renderEmptyHint(listRecentSpike, "recentSpike");
+      } else {
+        items.forEach((it, i) => {
+          listRecentSpike.appendChild(
+            makeStockItemEl(it, "recentSpike", i)
+          );
+        });
+      }
+      refreshActiveHighlight();
+    } catch (e) {
+      recentSpikeState.total = 0;
+      listRecentSpike.innerHTML =
+        '<div class="status-bar error">请求失败</div>';
+    } finally {
+      recentSpikeState.loading = false;
+      applyPagerUi(
+        recentSpikeState,
+        pagerRecentSpikeInfo,
+        pagerRecentSpikePrev,
+        pagerRecentSpikeNext
+      );
     }
   }
 
@@ -830,10 +961,16 @@
     sidebarSearch.setAttribute("hidden", "");
     sidebarNormal.removeAttribute("hidden");
     pullupState.page = 1;
+    recentSpikeState.page = 1;
     startupState.page = 1;
     listPullup.innerHTML = "";
+    if (listRecentSpike) listRecentSpike.innerHTML = "";
     listStartup.innerHTML = "";
-    await Promise.all([fetchPullupList(), fetchStartupList()]);
+    await Promise.all([
+      fetchPullupList(),
+      fetchRecentSpikeList(),
+      fetchStartupList(),
+    ]);
   }
 
   async function onSearchInputChanged() {
@@ -866,6 +1003,33 @@
     pullupState.page = 1;
     fetchPullupList();
   });
+
+  if (pagerRecentSpikePrev && pagerRecentSpikeNext) {
+    pagerRecentSpikePrev.addEventListener("click", function () {
+      if (recentSpikeState.page > 1) {
+        recentSpikeState.page -= 1;
+        fetchRecentSpikeList();
+      }
+    });
+    pagerRecentSpikeNext.addEventListener("click", function () {
+      const tp = totalPages(
+        recentSpikeState.total,
+        recentSpikeState.pageSize
+      );
+      if (recentSpikeState.page < tp) {
+        recentSpikeState.page += 1;
+        fetchRecentSpikeList();
+      }
+    });
+  }
+  if (pagerRecentSpikeSize) {
+    pagerRecentSpikeSize.addEventListener("change", function () {
+      recentSpikeState.pageSize =
+        parseInt(pagerRecentSpikeSize.value, 10) || 10;
+      recentSpikeState.page = 1;
+      fetchRecentSpikeList();
+    });
+  }
 
   pagerStartupPrev.addEventListener("click", function () {
     if (startupState.page > 1) {
@@ -953,6 +1117,7 @@
   }
 
   fetchPullupList();
+  fetchRecentSpikeList();
   fetchStartupList();
   fetchBlockRank();
 })();

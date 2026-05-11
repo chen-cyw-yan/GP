@@ -15,6 +15,9 @@ from sqlalchemy.exc import SQLAlchemyError
 
 logger = logging.getLogger(__name__)
 
+# 侧栏市值：原始推算值（元）与展示口径的整体比例（数据源合并口径校准）
+MARKET_CAP_YUAN_DISPLAY_SCALE = 100.0
+
 _load_lock = threading.Lock()
 _df_cache: pd.DataFrame | None = None
 _engine_uri_cache: str | None = None
@@ -118,6 +121,87 @@ def generate_signals(df: pd.DataFrame) -> pd.DataFrame:
     df.loc[df["signal_high_vol_flat"], "vol_pric_err"] = "放量横盘"
 
     return df
+
+
+def _turnover_scalar_to_percent(raw: Any) -> float | None:
+    """单行 turnover 转为百分数尺度（与 normalize_turnover_to_percent 一致）。"""
+    if raw is None or (isinstance(raw, float) and np.isnan(raw)):
+        return None
+    try:
+        v = float(raw)
+    except (TypeError, ValueError):
+        return None
+    if v <= 0:
+        return None
+    s = normalize_turnover_to_percent(pd.Series([v]))
+    out = float(s.iloc[0])
+    return out if out > 0 else None
+
+
+def _circ_mv_yuan_from_row(row: pd.Series) -> float | None:
+    """
+    流通市值（元）。
+    优先用 volume + turnover 反推股本（与 prod_online 中 turnover≈volume/outstanding_share、万股口径一致），
+    避免 outstanding_share 实际按「股」入库时多乘 10000。
+    """
+    close = row.get("close")
+    if close is None or pd.isna(close):
+        return None
+    c = float(close)
+    if c <= 0:
+        return None
+
+    vol = row.get("volume")
+    turnover = row.get("turnover")
+    if vol is not None and pd.notna(vol) and turnover is not None and pd.notna(turnover):
+        vol_f = float(vol)
+        t_eff = _turnover_scalar_to_percent(turnover)
+        if vol_f > 0 and t_eff is not None:
+            # turnover 百分数尺度下：流通股数(股) ≈ volume(手) × 10000 / turnover
+            shares = vol_f * 10000.0 / t_eff
+            if shares > 0 and np.isfinite(shares):
+                return c * shares
+
+    sh = row.get("outstanding_share")
+    if sh is None or pd.isna(sh):
+        return None
+    s = float(sh)
+    if s <= 0:
+        return None
+    # 字段注释多为「万股」；若数值已达「股」量级（如误按股入库），不再 ×10000
+    if s >= 1e8:
+        return c * s
+    return c * s * 10000.0
+
+
+def _format_mv_yuan(yuan: float) -> str:
+    if yuan >= 1e8:
+        return f"{yuan / 1e8:.2f}亿"
+    if yuan >= 1e4:
+        return f"{yuan / 1e4:.2f}万"
+    return f"{yuan:.0f}元"
+
+
+def market_cap_display_from_row(row: pd.Series) -> str | None:
+    """
+    侧栏展示用市值文案：优先使用表中已有市值字段（元），否则用成交量/换手率或股本估算。
+    结果在格式化前整体除以 MARKET_CAP_YUAN_DISPLAY_SCALE，与当前数据源量级对齐。
+    """
+    yuan = None
+    for col in ("total_mv", "total_market_value", "circ_mv", "float_mv"):
+        if col in row.index:
+            raw = row.get(col)
+            if raw is not None and pd.notna(raw):
+                try:
+                    yuan = float(raw)
+                    break
+                except (TypeError, ValueError):
+                    pass
+    if yuan is None:
+        yuan = _circ_mv_yuan_from_row(row)
+    if yuan is None:
+        return None
+    return _format_mv_yuan(yuan / MARKET_CAP_YUAN_DISPLAY_SCALE)
 
 
 def normalize_turnover_to_percent(s: pd.Series) -> pd.Series:
@@ -316,6 +400,67 @@ def list_buy_signals_recent(
                 if pd.notna(row.get("turnover"))
                 else None,
                 "close": float(row["close"]) if pd.notna(row.get("close")) else None,
+                "market_cap_display": market_cap_display_from_row(row),
+            }
+        )
+    total = len(rows)
+    p = max(1, int(page))
+    ps = max(1, min(int(page_size), 100))
+    start = (p - 1) * ps
+    return rows[start : start + ps], total
+
+
+def list_recent_spike_multi(
+    df: pd.DataFrame,
+    recent_trading_days: int = 7,
+    min_spike_count: int = 2,
+    page: int = 1,
+    page_size: int = 20,
+) -> tuple[list[dict[str, Any]], int]:
+    """
+    近期试盘：在最近 ``recent_trading_days`` 个交易日内，``is_spike_day``（试盘日）出现次数 ≥ ``min_spike_count`` 的股票。
+    与 K 线图上「试盘日」标记同一套规则。
+    """
+    udates = sorted(df["date"].unique())
+    if not len(udates):
+        return [], 0
+    tail_dates = set(udates[-max(1, int(recent_trading_days)) :])
+    spike_ok = df["is_spike_day"].fillna(False).astype(bool)
+    win = df[spike_ok & df["date"].isin(tail_dates)].copy()
+    if win.empty:
+        return [], 0
+
+    agg = win.groupby("code", as_index=False).agg(
+        spike_count=("date", "count"),
+        last_spike=("date", "max"),
+    )
+    need = int(min_spike_count)
+    agg = agg[agg["spike_count"] >= need]
+    if agg.empty:
+        return [], 0
+
+    rep = win.sort_values("date").groupby("code", as_index=False).tail(1)
+    merged = agg.merge(rep, on="code", how="inner")
+    merged = merged.sort_values(["spike_count", "last_spike"], ascending=[False, False])
+
+    t_disp = normalize_turnover_to_percent(merged["turnover"])
+    rows: list[dict[str, Any]] = []
+    for idx, row in merged.iterrows():
+        ld = row["last_spike"]
+        date_str = ld.strftime("%Y-%m-%d") if hasattr(ld, "strftime") else str(ld)[:10]
+        rows.append(
+            {
+                "code": row["code"],
+                "name": str(row.get("name", "") or row["code"]),
+                "date": date_str,
+                "spike_count": int(row["spike_count"]),
+                "recent_window_days": int(recent_trading_days),
+                "turnover": float(row["turnover"]) if pd.notna(row.get("turnover")) else None,
+                "turnover_pct_display": float(t_disp.loc[idx])
+                if pd.notna(row.get("turnover"))
+                else None,
+                "close": float(row["close"]) if pd.notna(row.get("close")) else None,
+                "market_cap_display": market_cap_display_from_row(row),
             }
         )
     total = len(rows)
@@ -329,9 +474,11 @@ def list_stock_analysis_startup(
     engine_uri: str,
     page: int = 1,
     page_size: int = 20,
+    strategy_df: pd.DataFrame | None = None,
 ) -> tuple[list[dict[str, Any]], int]:
     """
     读取 gp.stock_analysis 中 need_to_analysis='1' 的记录（启动策列）。
+    若传入 strategy_df（与 get_strategy_frame 一致），则按 code 匹配最新一日行情并填充 market_cap_display。
     """
     p = max(1, int(page))
     ps = max(1, min(int(page_size), 100))
@@ -368,6 +515,12 @@ def list_stock_analysis_startup(
         logger.exception("查询 stock_analysis 失败")
         raise RuntimeError(f"读取启动策列失败: {e}") from e
 
+    latest_by_code: dict[str, pd.Series] = {}
+    if strategy_df is not None and len(strategy_df.index):
+        tail = strategy_df.sort_values("date").groupby("code", as_index=False).tail(1)
+        for _, srow in tail.iterrows():
+            latest_by_code[str(srow["code"])] = srow
+
     rows: list[dict[str, Any]] = []
     for _, row in df.iterrows():
         td = row.get("trade_date")
@@ -377,10 +530,12 @@ def list_stock_analysis_startup(
                 date_str = td.strftime("%Y-%m-%d")
             else:
                 date_str = str(td)[:10]
+        code = str(row["stock_code"])
+        s_latest = latest_by_code.get(code)
         rows.append(
             {
-                "code": str(row["stock_code"]),
-                "name": str(row.get("stock_name") or "") or str(row["stock_code"]),
+                "code": code,
+                "name": str(row.get("stock_name") or "") or code,
                 "date": date_str,
                 "trigger_count": int(row["trigger_count"])
                 if pd.notna(row.get("trigger_count"))
@@ -393,6 +548,9 @@ def list_stock_analysis_startup(
                 else None,
                 "industry_block": str(row["industry_block"])
                 if pd.notna(row.get("industry_block")) and row.get("industry_block")
+                else None,
+                "market_cap_display": market_cap_display_from_row(s_latest)
+                if s_latest is not None
                 else None,
             }
         )
@@ -424,7 +582,11 @@ def strategy_search_stocks(
     start = (p - 1) * ps
     chunk = hit.iloc[start : start + ps]
     items = [
-        {"code": r["code"], "name": str(r.get("name", "") or r["code"])}
+        {
+            "code": r["code"],
+            "name": str(r.get("name", "") or r["code"]),
+            "market_cap_display": market_cap_display_from_row(r),
+        }
         for _, r in chunk.iterrows()
     ]
     return items, total
