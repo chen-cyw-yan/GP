@@ -11,9 +11,161 @@ body.kline-dashboard-body {
 
 .layout-dashboard {
     display: flex;
-    align-items: flex-start;
+    align-items: stretch;
     min-height: 100vh;
     background: #eef1f5;
+}
+
+.sidebar-fav {
+    width: 200px;
+    min-width: 168px;
+    max-width: 260px;
+    background: #f8fafc;
+    border-right: 1px solid #cbd5e1;
+    display: flex;
+    flex-direction: column;
+    padding: 0.75rem 0.6rem;
+    gap: 0.45rem;
+    flex-shrink: 0;
+    box-sizing: border-box;
+}
+
+.sidebar-fav-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.sidebar-fav-title {
+    margin: 0;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #1e293b;
+}
+
+.sidebar-fav-hint {
+    margin: 0;
+    font-size: 0.68rem;
+    color: #64748b;
+    line-height: 1.35;
+}
+
+.sidebar-fav-scroll {
+    flex: 1;
+    min-height: 8rem;
+    max-height: calc(100vh - 8rem);
+    overflow-y: auto;
+}
+
+.fav-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.fav-item {
+    padding: 0.45rem 0.5rem;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    cursor: pointer;
+    text-align: left;
+    transition: border-color 0.15s, background 0.15s;
+}
+
+.fav-item:hover {
+    border-color: #93c5fd;
+    background: #f0f9ff;
+}
+
+.fav-item.active {
+    border-color: #2563eb;
+    background: #dbeafe;
+}
+
+.fav-item-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.35rem;
+}
+
+.fav-name {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #0f172a;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.fav-remove {
+    flex-shrink: 0;
+    width: 1.35rem;
+    height: 1.35rem;
+    padding: 0;
+    border: none;
+    border-radius: 6px;
+    background: #f1f5f9;
+    color: #64748b;
+    font-size: 1rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.fav-remove:hover {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
+.fav-meta {
+    margin-top: 0.25rem;
+    font-size: 0.68rem;
+    color: #64748b;
+    line-height: 1.35;
+}
+
+.fav-strategy {
+    color: #475569;
+    font-weight: 500;
+}
+
+.fav-empty {
+    font-size: 0.72rem;
+    color: #94a3b8;
+    padding: 0.5rem 0.25rem;
+    text-align: center;
+}
+
+.chart-header-right {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.35rem;
+    min-width: 0;
+}
+
+.btn-fav-add {
+    padding: 0.3rem 0.55rem;
+    border: 1px solid #fcd34d;
+    border-radius: 8px;
+    background: #fffbeb;
+    color: #b45309;
+    font-size: 0.75rem;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.btn-fav-add:hover {
+    background: #fef3c7;
+    border-color: #f59e0b;
+}
+
+.btn-fav-add:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
 }
 
 .sidebar-dash {
@@ -310,10 +462,11 @@ body.kline-dashboard-body {
 
 .chart-header {
     display: flex;
-    align-items: baseline;
+    align-items: flex-start;
     justify-content: space-between;
     gap: 1rem;
     margin-bottom: 0.5rem;
+    flex-wrap: wrap;
 }
 
 .chart-header h2 {

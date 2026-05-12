@@ -8,6 +8,15 @@
 </head>
 <body class="kline-dashboard-body">
     <div class="layout-dashboard">
+        <aside class="sidebar-fav" aria-label="收藏股票">
+            <div class="sidebar-fav-head">
+                <h2 class="sidebar-fav-title">收藏</h2>
+            </div>
+            <p class="sidebar-fav-hint">在右侧 K 线标题旁点击「加入收藏」</p>
+            <div class="acc-scroll-list sidebar-fav-scroll">
+                <div class="fav-list" id="list-favorites"></div>
+            </div>
+        </aside>
         <aside class="sidebar-dash">
             <div style="display:flex;justify-content:space-between;align-items:center">
                 <h2>导航</h2>
@@ -130,7 +139,10 @@
         <main class="main-dash">
             <div class="chart-header">
                 <h2>K线图</h2>
-                <div class="stock-title" id="chart-stock-title">请选择左侧股票</div>
+                <div class="chart-header-right">
+                    <div class="stock-title" id="chart-stock-title">请选择左侧股票</div>
+                    <button type="button" class="btn-fav-add" id="btn-add-favorite" title="将当前股票加入左侧收藏">加入收藏</button>
+                </div>
             </div>
             <div class="chart-wrap">
                 <div id="chart-main"></div>

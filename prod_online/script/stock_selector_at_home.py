@@ -264,7 +264,7 @@ def main():
     #         )
 
         # ===== 同时发送完整Excel =====
-    excel_path = "prod_online/imges/result.xlsx"
+    excel_path = "E:\stock\GP\prod_online\imges/result.xlsx"
     df.to_excel(excel_path, index=False)
     fs_client=FeishuUtils('cli_a9256b2aef7a5cd4','t22QBXS6MVqsXC41GoCDvbxin0tpXyL3')
     context={

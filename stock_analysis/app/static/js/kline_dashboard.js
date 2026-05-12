@@ -12,6 +12,9 @@
   const listRecentSpike = document.getElementById("list-recent-spike");
   const listStartup = document.getElementById("list-startup");
   const listSearch = document.getElementById("list-search");
+  const listFavorites = document.getElementById("list-favorites");
+  const btnAddFavorite = document.getElementById("btn-add-favorite");
+  const chartStockTitle = document.getElementById("chart-stock-title");
 
   const pagerPullupPrev = document.getElementById("pager-pullup-prev");
   const pagerPullupNext = document.getElementById("pager-pullup-next");
@@ -90,6 +93,20 @@
     total: 0,
     loading: false,
   };
+
+  const FAV_STORAGE_KEY = "kline_dashboard_favorites_v1";
+  const STRATEGY_LABELS = {
+    pullup: "拉升试盘策列",
+    recentSpike: "近期试盘（近7日≥2次）",
+    startup: "启动策列",
+    search: "检索",
+    manual: "手动加载",
+    favorite: "收藏列表",
+  };
+
+  let lastKlineSource = "pullup";
+  let lastFavoriteStrategyLabel = null;
+  let currentKlineMeta = { code: null, name: null };
 
   function setStatus(msg, isErr) {
     statusEl.textContent = msg || "";
@@ -396,8 +413,14 @@
     };
   }
 
-  async function loadKline(code) {
+  async function loadKline(code, source) {
     if (!code) return;
+    if (source !== undefined && source !== null && source !== "") {
+      lastKlineSource = source;
+      if (source !== "favorite") {
+        lastFavoriteStrategyLabel = null;
+      }
+    }
     activeCode = code;
     setStatus("加载 K 线…");
     try {
@@ -411,15 +434,17 @@
         setStatus(json.error || "加载失败", true);
         return;
       }
-      const titleEl = document.getElementById("chart-stock-title");
+      const titleEl = chartStockTitle || document.getElementById("chart-stock-title");
       const d = json.data;
       titleEl.textContent =
         (d.name || "") + " (" + d.code + ")";
+      currentKlineMeta = {
+        code: d.code || code,
+        name: String(d.name || "").trim() || String(code),
+      };
       chart.setOption(buildOption(d), true);
       setStatus("");
-      document.querySelectorAll(".stock-item").forEach((el) => {
-        el.classList.toggle("active", el.dataset.code === code);
-      });
+      refreshActiveHighlight();
       blockRankState.page = 1;
       fetchBlockRank(code);
     } catch (e) {
@@ -440,6 +465,134 @@
     const d = document.createElement("div");
     d.textContent = text;
     return d.innerHTML;
+  }
+
+  function modeToKlineSource(mode) {
+    if (mode === "signal") return "pullup";
+    if (mode === "recentSpike") return "recentSpike";
+    if (mode === "startup") return "startup";
+    if (mode === "search") return "search";
+    return "pullup";
+  }
+
+  function loadFavoritesFromStorage() {
+    try {
+      const raw = localStorage.getItem(FAV_STORAGE_KEY);
+      if (!raw) return [];
+      const arr = JSON.parse(raw);
+      return Array.isArray(arr) ? arr : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function saveFavoritesToStorage(items) {
+    try {
+      localStorage.setItem(FAV_STORAGE_KEY, JSON.stringify(items));
+    } catch (e) {
+      setStatus("收藏保存失败（浏览器可能禁止本地存储）", true);
+    }
+  }
+
+  function strategyLabelForNewFavorite() {
+    if (lastKlineSource === "favorite" && lastFavoriteStrategyLabel) {
+      return lastFavoriteStrategyLabel;
+    }
+    return STRATEGY_LABELS[lastKlineSource] || "其他";
+  }
+
+  function displayNameForFavoriteAdd() {
+    if (currentKlineMeta.code === activeCode && currentKlineMeta.name) {
+      return currentKlineMeta.name;
+    }
+    const t = chartStockTitle ? chartStockTitle.textContent : "";
+    const m = t.match(/^(.+)\s+\(/);
+    if (m) return m[1].trim();
+    return activeCode || "";
+  }
+
+  function renderFavoritesList() {
+    if (!listFavorites) return;
+    const items = loadFavoritesFromStorage();
+    listFavorites.innerHTML = "";
+    if (!items.length) {
+      const empty = document.createElement("div");
+      empty.className = "fav-empty";
+      empty.textContent = "暂无收藏";
+      listFavorites.appendChild(empty);
+      return;
+    }
+    items.forEach(function (entry) {
+      const card = document.createElement("div");
+      card.className = "fav-item";
+      card.dataset.code = entry.code;
+      card.tabIndex = 0;
+      card.setAttribute("role", "button");
+      const dateStr = entry.addedAt
+        ? String(entry.addedAt).slice(0, 10)
+        : "—";
+      card.innerHTML =
+        '<div class="fav-item-head">' +
+        '<span class="fav-name">' +
+        escapeHtml(entry.name || entry.code || "") +
+        '</span><button type="button" class="fav-remove" aria-label="移除">×</button></div>' +
+        '<div class="fav-meta"><span class="fav-strategy">' +
+        escapeHtml(entry.strategyLabel || "—") +
+        "</span> · " +
+        escapeHtml(dateStr) +
+        "</div>";
+      const rm = card.querySelector(".fav-remove");
+      rm.addEventListener("click", function (ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        const next = loadFavoritesFromStorage().filter(function (x) {
+          return x.code !== entry.code;
+        });
+        saveFavoritesToStorage(next);
+        renderFavoritesList();
+        refreshActiveHighlight();
+      });
+      card.addEventListener("click", function (ev) {
+        if (ev.target.closest(".fav-remove")) return;
+        lastFavoriteStrategyLabel =
+          entry.strategyLabel || STRATEGY_LABELS.favorite;
+        loadKline(entry.code, "favorite");
+      });
+      card.addEventListener("keydown", function (ev) {
+        if (ev.key === "Enter" || ev.key === " ") {
+          ev.preventDefault();
+          lastFavoriteStrategyLabel =
+            entry.strategyLabel || STRATEGY_LABELS.favorite;
+          loadKline(entry.code, "favorite");
+        }
+      });
+      listFavorites.appendChild(card);
+    });
+    refreshActiveHighlight();
+  }
+
+  function addCurrentToFavorites() {
+    if (!activeCode) {
+      setStatus("请先加载一只股票", true);
+      return;
+    }
+    const code = String(activeCode).trim();
+    const name = displayNameForFavoriteAdd() || code;
+    const strategyLabel = strategyLabelForNewFavorite();
+    const addedAt = new Date().toISOString().slice(0, 10);
+    let list = loadFavoritesFromStorage();
+    const rest = list.filter(function (x) {
+      return x.code !== code;
+    });
+    rest.unshift({
+      code: code,
+      name: name,
+      strategyLabel: strategyLabel,
+      addedAt: addedAt,
+    });
+    saveFavoritesToStorage(rest);
+    renderFavoritesList();
+    setStatus("已加入收藏");
   }
 
   function stockNameRowHtml(it) {
@@ -523,11 +676,11 @@
     }
     div.innerHTML =
       stockNameRowHtml(it) + '<div class="meta">' + meta + "</div>";
-    div.addEventListener("click", () => loadKline(it.code));
+    div.addEventListener("click", () => loadKline(it.code, modeToKlineSource(mode)));
     div.addEventListener("keydown", function (ev) {
       if (ev.key === "Enter" || ev.key === " ") {
         ev.preventDefault();
-        loadKline(it.code);
+        loadKline(it.code, modeToKlineSource(mode));
       }
     });
     return div;
@@ -747,7 +900,7 @@
           listPullup.appendChild(makeStockItemEl(it, "signal", i));
         });
         if (pullupState.page === 1 && !activeCode) {
-          loadKline(items[0].code);
+          loadKline(items[0].code, "pullup");
         }
       }
       refreshActiveHighlight();
@@ -937,10 +1090,14 @@
   }
 
   function refreshActiveHighlight() {
-    if (!activeCode) return;
     document.querySelectorAll(".stock-item").forEach((el) => {
-      el.classList.toggle("active", el.dataset.code === activeCode);
+      el.classList.toggle("active", !!activeCode && el.dataset.code === activeCode);
     });
+    if (listFavorites) {
+      document.querySelectorAll(".fav-item").forEach((el) => {
+        el.classList.toggle("active", !!activeCode && el.dataset.code === activeCode);
+      });
+    }
   }
 
   async function enterSearchMode(q) {
@@ -1078,15 +1235,21 @@
 
   btnManual.addEventListener("click", function () {
     const c = (manualCode.value || "").trim();
-    if (c) loadKline(c);
+    if (c) loadKline(c, "manual");
   });
 
   manualCode.addEventListener("keydown", function (ev) {
     if (ev.key === "Enter") {
       const c = (manualCode.value || "").trim();
-      if (c) loadKline(c);
+      if (c) loadKline(c, "manual");
     }
   });
+
+  if (btnAddFavorite) {
+    btnAddFavorite.addEventListener("click", function () {
+      addCurrentToFavorites();
+    });
+  }
 
   window.addEventListener("resize", function () {
     chart.resize();
@@ -1120,4 +1283,5 @@
   fetchRecentSpikeList();
   fetchStartupList();
   fetchBlockRank();
+  renderFavoritesList();
 })();
