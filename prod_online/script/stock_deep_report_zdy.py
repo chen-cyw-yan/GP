@@ -719,17 +719,8 @@ def main():
         "stock_code": "sz001208",
         "stock_name": "华菱线缆"
     },{
-        "stock_code": "sh600480",
-        "stock_name": "凌云股份"
-    },{
-        "stock_code": "sz002851",
-        "stock_name": "麦格米特"
-    },{
-        "stock_code": "sh600552",
-        "stock_name": "中天科技"
-    },{
-        "stock_code": "sh600776",
-        "stock_name": "东方通信"
+        "stock_code": "sh603203",
+        "stock_name": "快克智能"
     }])
 
 

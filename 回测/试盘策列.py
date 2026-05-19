@@ -267,7 +267,16 @@ def main(add_codes=[],turnover_min=5.0,date='2026-05-11'):
     df=df.loc[is_main_board]
 
     code_ls=[
-        'sz000815'
+        "sh600500",
+        "sh603120",
+        "sh603353",
+        "sh603585",
+        "sz000822",
+        "sz000830",
+        "sz002545",
+        "sz300575",
+        "sz300721",
+        "sh603179"
             ]
 
     print(df)
@@ -276,8 +285,8 @@ def main(add_codes=[],turnover_min=5.0,date='2026-05-11'):
     day_df = df.loc[
        (df['date'] == date) &
     #    (df['turnover'] >= turnover_min) &
-        ((df['buy_signal'])  |
-          (df['code'].isin(code_ls)))
+        # ((df['buy_signal'])  |
+          ((df['code'].isin(code_ls)))
     ]
 
     logger.info("="*30 + " 清除文件 " + "="*30)
