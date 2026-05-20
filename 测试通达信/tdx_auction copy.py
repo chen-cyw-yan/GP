@@ -41,6 +41,14 @@ RESULT_COLUMNS_CN = {
 }
 
 
+def _normalize_auction_time(series: pd.Series) -> pd.Series:
+    """统一为无时区的 datetime，避免与 Timestamp 比较报错。"""
+    t = pd.to_datetime(series)
+    if getattr(t.dt, "tz", None) is not None:
+        t = t.dt.tz_convert("Asia/Shanghai").dt.tz_localize(None)
+    return t
+
+
 def fetch_stock_context(engine, before_date: str) -> pd.DataFrame:
     """
     读取股票上下文：上一交易日行情 + 最近一条非零流通股本（万股）。
@@ -79,6 +87,8 @@ def fetch_stock_context(engine, before_date: str) -> pd.DataFrame:
     share_df = pd.read_sql(sql_share, con=engine)
     ctx = prev_df.merge(share_df, on="code", how="left")
     return ctx.set_index("code")
+
+
 def calc_auc_features(
     df: pd.DataFrame,
     prev_close: Optional[float] = None,
@@ -88,14 +98,6 @@ def calc_auc_features(
     """
     计算单只股票竞价强度特征
 
-    注意：
-    1. 撤单分析：
-       使用 09:15~09:25 全量数据
-
-    2. 趋势分析（价格斜率/撮合量斜率）：
-       仅使用 09:20~09:25 数据
-       因为该阶段不可撤单，更真实
-
     参数:
     df:
         code
@@ -104,126 +106,98 @@ def calc_auc_features(
         match（手）
         unmatched
         flag
+    prev_close: 上一交易日收盘价（元）
+    outstanding_share: 流通股本（万股），取库中最后一次非零记录
 
-    prev_close:
-        昨收
-
-    outstanding_share:
-        流通股本（万股）
-
+    返回:
+        dict
     """
 
     df = df.copy()
+    df["time"] = _normalize_auction_time(df["time"])
 
-    # =========================================
     # 时间排序
-    # =========================================
     df = df.sort_values("time").reset_index(drop=True)
 
-    # =========================================
+    # -------------------------
     # 基础过滤
-    # =========================================
+    # -------------------------
     if len(df) < 5:
         return None
 
-    # =========================================
-    # 全量数据（用于撤单分析）
-    # =========================================
-    df_all = df.copy()
+    # -------------------------
+    # 时间转秒
+    # -------------------------
+    start_time = df["time"].min()
 
-    # =========================================
-    # 仅保留 09:20 以后（用于趋势分析）
-    # =========================================
-    auction_start = pd.to_datetime("09:20:00").time()
+    
 
-    df_real = df.loc[
-        df["time"].dt.time >= auction_start
-    ].copy()
 
-    # 趋势数据太少
-    if len(df_real) < 3:
+    df["sec"] = (
+            (df["time"] - start_time)
+            .dt.total_seconds()
+    )
+    # 09:20 起为集合竞价撮合阶段（按数据当日，不写死日期）
+    auction_day = df["time"].iloc[0].normalize()
+    cutoff = auction_day + pd.Timedelta(hours=9, minutes=20)
+    df_cj = df.loc[df["time"] >= cutoff]
+    if len(df_cj) < 5:
         return None
 
-    # =========================================
-    # 时间转秒
-    # =========================================
-    start_time = df_real["time"].min()
-
-    df_real["sec"] = (
-        (df_real["time"] - start_time)
-        .dt.total_seconds()
-    )
-
-    # =========================================
+    # -------------------------
     # 价格趋势斜率
-    # 仅使用09:20后数据
-    # =========================================
-    x = df_real["sec"].values.reshape(-1, 1)
-
-    y = df_real["price"].values
+    # -------------------------
+    x = df_cj["sec"].values.reshape(-1, 1)
+    y = df_cj["price"].values
 
     model = LinearRegression()
-
     model.fit(x, y)
 
-    # 原始斜率
     price_slope_raw = model.coef_[0]
-
-    # 放大方便观察
     price_slope = price_slope_raw * 1000
 
-    # =========================================
-    # 竞价日内涨幅
-    # 首价 -> 末价
-    # =========================================
-    first_price = df_real["price"].iloc[0]
-
-    last_price = df_real["price"].iloc[-1]
+    # -------------------------
+    # 竞价日内涨幅：竞价首价 → 竞价末价
+    # -------------------------
+    first_price = df["price"].iloc[0]
+    last_price = df["price"].iloc[-1]
 
     auction_intraday_rate = (
-        (last_price - first_price)
-        / first_price
+            (last_price - first_price)
+            / first_price
     )
 
-    # =========================================
-    # 撮合量趋势斜率
-    # 仅使用09:20后数据
-    # =========================================
-    y_match = df_real["match"].values
+    # -------------------------
+    # 撮合量趋势
+    # -------------------------
+    y_match = df_cj["match"].values
 
     model_match = LinearRegression()
-
     model_match.fit(x, y_match)
 
     match_slope = model_match.coef_[0]
 
-    # =========================================
-    # 买卖未匹配量
-    # 使用全量数据
-    # =========================================
-    buy_df = df_all[df_all["flag"] == 1]
-
-    sell_df = df_all[df_all["flag"] == -1]
+    # -------------------------
+    # 买卖未匹配
+    # -------------------------
+    buy_df = df[df["flag"] == 1]
+    sell_df = df[df["flag"] == -1]
 
     buy_unmatched = buy_df["unmatched"].sum()
-
     sell_unmatched = sell_df["unmatched"].sum()
 
-    # 买卖未匹配比
     if sell_unmatched == 0:
-
         bid_ask_ratio = 999
-
     else:
-
         bid_ask_ratio = (
-            buy_unmatched / sell_unmatched
+                buy_unmatched / sell_unmatched
         )
 
-    # =========================================
+    # -------------------------
     # 撤单稳定性
-    # 使用全量数据
-    # =========================================
+    # -------------------------
+    # 买单突然减少 -> 认为撤单
+
     buy_series = (
         buy_df.groupby("time")["unmatched"]
         .sum()
@@ -234,167 +208,84 @@ def calc_auc_features(
 
         diff = buy_series.diff()
 
-        # 买单减少 -> 认为撤单
+        # 大幅减少视为撤单
         cancel_count = (diff < 0).sum()
 
-        # 稳定性
         stability = 1 / (1 + cancel_count)
 
     else:
-
         stability = 0
 
-    # =========================================
-    # 竞价成交量
-    # 通达信 match 单位是 手
-    # =========================================
-    auction_volume_lots = float(
-        df_real["match"].iloc[-1]
+    # -------------------------
+    # 竞价综合评分
+    # -------------------------
+    auction_score = (
+            0.35 * price_slope_raw +
+            0.25 * match_slope / 10000 +
+            0.25 * bid_ask_ratio +
+            0.15 * stability
     )
 
-    # 股
-    auction_volume_shares = (
-        auction_volume_lots * 100
-    )
+    # 竞价撮合量（手），通达信 match 字段单位为手
+    auction_volume_lots = float(df["match"].iloc[-1])
+    # 竞价成交量（股）= 手 × 100
+    auction_volume_shares = auction_volume_lots * 100
 
-    # =========================================
-    # 基础结果
-    # =========================================
     result = {
-
         "code": df["code"].iloc[0],
-
         "name": stock_name,
 
-        "first_price": round(first_price, 4),
+        "first_price": first_price,
+        "last_price": last_price,
 
-        "last_price": round(last_price, 4),
+        "auction_intraday_rate": round(auction_intraday_rate, 4),
 
-        "auction_intraday_rate": round(
-            auction_intraday_rate,
-            4
-        ),
+        "price_slope": round(price_slope, 6),
 
-        "price_slope": round(
-            price_slope,
-            6
-        ),
+        "match_slope": round(match_slope, 2),
 
-        "match_slope": round(
-            match_slope,
-            2
-        ),
+        "auction_volume_lots": round(auction_volume_lots, 2),
+        "auction_volume_shares": int(auction_volume_shares),
 
-        "auction_volume_lots": round(
-            auction_volume_lots,
-            2
-        ),
+        "buy_unmatched": int(buy_unmatched),
+        "sell_unmatched": int(sell_unmatched),
 
-        "auction_volume_shares": int(
-            auction_volume_shares
-        ),
+        "bid_ask_ratio": round(bid_ask_ratio, 2),
 
-        "buy_unmatched": int(
-            buy_unmatched
-        ),
+        "stability": round(stability, 4),
 
-        "sell_unmatched": int(
-            sell_unmatched
-        ),
-
-        "bid_ask_ratio": round(
-            bid_ask_ratio,
-            2
-        ),
-
-        "stability": round(
-            stability,
-            4
-        ),
+        "auction_score": round(auction_score, 4),
     }
 
-    # =========================================
-    # 计算竞价涨幅/换手率
-    # =========================================
+    # 需上一交易日收盘价与流通股本（万股）才能计算涨幅/占股本/换手率
     if (
         prev_close is not None
         and prev_close > 0
         and outstanding_share is not None
         and outstanding_share > 0
     ):
-
-        # -------------------------------------
-        # 竞价涨幅
-        # 昨收 -> 竞价末价
-        # -------------------------------------
-        auction_change_rate = (
-            last_price / prev_close - 1
-        )
-
-        # -------------------------------------
-        # 流通股本（股）
-        # outstanding_share 单位：万股
-        # -------------------------------------
-        float_shares = (
-            outstanding_share * 10000
-        )
-
-        # -------------------------------------
-        # 成交量占股本
-        # -------------------------------------
-        auction_vol_of_share = (
-            auction_volume_shares
-            / float_shares
-        ) * 100
-
-        # -------------------------------------
-        # 竞价换手率(%)
-        # -------------------------------------
-        auction_turnover = (
-            auction_volume_shares
-            / float_shares
-        ) * 100
+        # 竞价涨幅：昨收 → 竞价末价
+        auction_change_rate = last_price / prev_close - 1
+        # 流通股本（股）= 万股 × 10000
+        float_shares = outstanding_share 
+        # 竞价成交量占流通股本（比例，如 0.01 表示 1%）
+        auction_vol_of_share = auction_volume_shares*100 / float_shares
+        # 竞价换手率（%），与 stock 表口径一致：手 / 万股
+        auction_turnover = auction_volume_lots*10000 / outstanding_share
 
         result.update({
-
-            "prev_close": round(
-                float(prev_close),
-                4
-            ),
-
-            "outstanding_share": round(
-                float(outstanding_share),
-                4
-            ),
-
-            "auction_change_rate": round(
-                auction_change_rate,
-                4
-            ),
-
-            "auction_vol_of_share": round(
-                auction_vol_of_share,
-                6
-            ),
-
-            "auction_turnover": round(
-                auction_turnover,
-                6
-            ),
+            "prev_close": round(float(prev_close), 4),
+            "outstanding_share": round(float(outstanding_share), 4),
+            "auction_change_rate": round(auction_change_rate, 4),
+            "auction_vol_of_share": round(auction_vol_of_share, 6),
+            "auction_turnover": round(auction_turnover, 4),
         })
-
     else:
-
         result.update({
-
             "prev_close": None,
-
             "outstanding_share": None,
-
             "auction_change_rate": None,
-
             "auction_vol_of_share": None,
-
             "auction_turnover": None,
         })
 
@@ -445,6 +336,12 @@ def rank_auction(
 
     result_df = pd.DataFrame(result)
 
+    if result_df.empty:
+        print("警告: 无有效竞价特征，请检查时间过滤或数据源")
+        return pd.DataFrame(columns=list(RESULT_COLUMNS_CN.keys())).rename(
+            columns=RESULT_COLUMNS_CN
+        )
+
     # ====================================
     # 过滤
     # ====================================
@@ -454,7 +351,8 @@ def rank_auction(
     ]
 
     result_df = result_df.loc[
-        result_df["auction_turnover"] > 0.002
+        (result_df["auction_turnover"] <= 0.3) |
+        (result_df["auction_turnover"] >= 0.05)
     ]
 
     # ====================================
@@ -486,15 +384,7 @@ def rank_auction(
     # ====================================
     # 标准化
     # ====================================
-    # ====================================
-# 空结果保护
-# ====================================
 
-    if result_df.empty:
-
-        print("过滤后无有效竞价数据")
-
-        return pd.DataFrame()
     factor_cols = [
 
         "price_slope",
@@ -612,6 +502,7 @@ def main():
     engine = create_engine(DB_URL)
     # True: 计算 gp.stock 全部股票；False: 仅 stock_analysis 待分析股票
     use_all_stocks = True
+    use_all_stocks = False
     df_analy = get_data(engine, is_all=use_all_stocks)
     # 以任务列表最近交易日为基准，查询其上一交易日行情
     trade_date = pd.to_datetime(df_analy["trade_date"].max()).strftime("%Y-%m-%d")
@@ -629,8 +520,11 @@ def main():
         stock_context=stock_context,
         code_name_map=code_name_map,
     )
-    print(result.columns)
-    result = result.loc[result["价格斜率"] > 0]
+    if result.empty:
+        print("无结果可输出")
+        return
+    if "价格斜率" in result.columns:
+        result = result.loc[result["价格斜率"] > 0]
     result['竞价日内涨幅']=result['竞价日内涨幅'].round(4)
     result['价格斜率']=result['价格斜率'].round(6)
     result['竞价综合分']=result['竞价综合分'].round(4)
